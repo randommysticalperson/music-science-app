@@ -113,6 +113,59 @@ function playNote(audioCtx: AudioContext, frequency: number, duration = 1.2) {
 
 // ─── Piano Component ──────────────────────────────────────────────────────────
 
+// ─── Standard Online Piano Keyboard Mapping ──────────────────────────────────
+// Layout matches Virtual Piano / OnlinePianist standard:
+//   Lower row (white keys):  A S D F G H J  | K L ; '
+//   Lower row (black keys):  W E   T Y U    | O P
+//   Upper row (white keys):  Z X C V B N M  | , . /
+//   Upper row (black keys):  S D   G H J    | L ;
+// We use TWO octaves: lower octave on Z-row, upper octave on A-row
+
+// Each entry: { midiOffset (from C4), keyLabel, isBlack }
+// Octave 1 (C4–B4): keyboard row starting at Z
+// Octave 2 (C5–B5): keyboard row starting at A
+
+const KEYBOARD_MAP: Record<string, { midiNote: number; label: string }> = {
+  // ── Octave 4 (C4–B4) — bottom row ──
+  z: { midiNote: 48, label: "Z" },   // C4
+  s: { midiNote: 49, label: "S" },   // C#4
+  x: { midiNote: 50, label: "X" },   // D4
+  d: { midiNote: 51, label: "D" },   // D#4
+  c: { midiNote: 52, label: "C" },   // E4
+  v: { midiNote: 53, label: "V" },   // F4
+  g: { midiNote: 54, label: "G" },   // F#4
+  b: { midiNote: 55, label: "B" },   // G4
+  h: { midiNote: 56, label: "H" },   // G#4
+  n: { midiNote: 57, label: "N" },   // A4
+  j: { midiNote: 58, label: "J" },   // A#4
+  m: { midiNote: 59, label: "M" },   // B4
+  // ── Octave 5 (C5–B5) — top row ──
+  q: { midiNote: 60, label: "Q" },   // C5
+  "2": { midiNote: 61, label: "2" }, // C#5
+  w: { midiNote: 62, label: "W" },   // D5
+  "3": { midiNote: 63, label: "3" }, // D#5
+  e: { midiNote: 64, label: "E" },   // E5
+  r: { midiNote: 65, label: "R" },   // F5
+  "5": { midiNote: 66, label: "5" }, // F#5
+  t: { midiNote: 67, label: "T" },   // G5
+  "6": { midiNote: 68, label: "6" }, // G#5
+  y: { midiNote: 69, label: "Y" },   // A5
+  "7": { midiNote: 70, label: "7" }, // A#5
+  u: { midiNote: 71, label: "U" },   // B5
+  // ── Octave 6 (C6–E6) — continuation ──
+  i: { midiNote: 72, label: "I" },   // C6
+  "9": { midiNote: 73, label: "9" }, // C#6
+  o: { midiNote: 74, label: "O" },   // D6
+  "0": { midiNote: 75, label: "0" }, // D#6
+  p: { midiNote: 76, label: "P" },   // E6
+};
+
+// Reverse map: midiNote → key label
+const MIDI_TO_KEY: Record<number, string> = {};
+Object.entries(KEYBOARD_MAP).forEach(([, v]) => {
+  MIDI_TO_KEY[v.midiNote] = v.label;
+});
+
 const WHITE_KEYS = [0, 2, 4, 5, 7, 9, 11]; // C D E F G A B
 const BLACK_KEYS = [1, 3, -1, 6, 8, 10, -1]; // C# D# - F# G# A# -
 
@@ -120,88 +173,164 @@ function Piano({
   highlightedNotes,
   rootNote,
   onNotePlay,
+  pressedKeys,
 }: {
   highlightedNotes: number[];
   rootNote: number;
-  onNotePlay: (semitone: number) => void;
+  onNotePlay: (midiNote: number) => void;
+  pressedKeys: Set<number>;
 }) {
-  const octaves = 2;
+  // 3 octaves: C4–B6 (covers all mapped keys)
   const startOctave = 4;
+  const octaves = 3;
 
   return (
-    <div className="relative select-none" style={{ height: 120 }}>
-      <div className="flex" style={{ height: 120 }}>
-        {Array.from({ length: octaves }).map((_, oct) =>
-          WHITE_KEYS.map((semitone, wIdx) => {
-            const absoluteSemitone = semitone % 12;
-            const isHighlighted = highlightedNotes.includes(absoluteSemitone);
-            const isRoot = absoluteSemitone === rootNote % 12;
-            const midiNote = (startOctave + oct) * 12 + semitone;
-            const blackOffset = BLACK_KEYS[wIdx];
+    <div className="relative select-none overflow-x-auto">
+      {/* Keyboard hint legend */}
+      <div
+        className="flex items-center gap-4 mb-2 flex-wrap"
+        style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#8a9bb0" }}
+      >
+        <span>⌨ Keyboard: <span style={{ color: "#ff4f1f" }}>Z–M</span> = C4–B4 &nbsp;|&nbsp; <span style={{ color: "#00d4ff" }}>Q–U</span> = C5–B5 &nbsp;|&nbsp; <span style={{ color: "#a78bfa" }}>I–P</span> = C6–E6</span>
+        <span style={{ color: "rgba(138,155,176,0.5)" }}>Black keys: S D G H J (oct4) · 2 3 5 6 7 (oct5)</span>
+      </div>
 
-            return (
-              <div key={`${oct}-${wIdx}`} className="relative" style={{ width: 36, flexShrink: 0 }}>
-                {/* White key */}
-                <div
-                  className="piano-key-white absolute"
-                  style={{
-                    width: 34,
-                    height: 110,
-                    top: 0,
-                    left: 1,
-                    background: isRoot
-                      ? "#ffe0d0"
-                      : isHighlighted
-                      ? "#fff0e8"
-                      : "#f8f8f6",
-                    borderTop: isRoot
-                      ? "3px solid #ff4f1f"
-                      : isHighlighted
-                      ? "3px solid #ffb89a"
-                      : "none",
-                    zIndex: 1,
-                    cursor: "pointer",
-                  }}
-                  onMouseDown={() => onNotePlay(midiNote)}
-                >
-                  {wIdx === 0 && (
+      <div className="relative" style={{ height: 140 }}>
+        <div className="flex" style={{ height: 140 }}>
+          {Array.from({ length: octaves }).map((_, oct) =>
+            WHITE_KEYS.map((semitone, wIdx) => {
+              const absoluteSemitone = semitone % 12;
+              const isHighlighted = highlightedNotes.includes(absoluteSemitone);
+              const isRoot = absoluteSemitone === rootNote % 12;
+              const midiNote = (startOctave + oct) * 12 + semitone;
+              const blackSemitone = BLACK_KEYS[wIdx];
+              const blackMidi = blackSemitone !== -1 ? (startOctave + oct) * 12 + blackSemitone : -1;
+              const isWhitePressed = pressedKeys.has(midiNote);
+              const isBlackPressed = blackMidi !== -1 && pressedKeys.has(blackMidi);
+              const blackHighlighted = blackSemitone !== -1 && highlightedNotes.includes(blackSemitone % 12);
+              const blackIsRoot = blackSemitone !== -1 && rootNote % 12 === blackSemitone % 12;
+
+              // Key label for white key
+              const whiteLabel = MIDI_TO_KEY[midiNote];
+              const blackLabel = blackMidi !== -1 ? MIDI_TO_KEY[blackMidi] : undefined;
+
+              return (
+                <div key={`${oct}-${wIdx}`} className="relative" style={{ width: 38, flexShrink: 0 }}>
+                  {/* White key */}
+                  <div
+                    className="absolute transition-colors duration-75"
+                    style={{
+                      width: 36,
+                      height: 130,
+                      top: 0,
+                      left: 1,
+                      borderRadius: "0 0 4px 4px",
+                      border: "1px solid #d0ccc4",
+                      borderTop: isRoot
+                        ? "3px solid #ff4f1f"
+                        : isHighlighted
+                        ? "3px solid #ffb89a"
+                        : "1px solid #d0ccc4",
+                      background: isWhitePressed
+                        ? "#ffd0b8"
+                        : isRoot
+                        ? "#ffe0d0"
+                        : isHighlighted
+                        ? "#fff0e8"
+                        : "#f8f8f6",
+                      boxShadow: isWhitePressed
+                        ? "inset 0 -2px 4px rgba(0,0,0,0.15)"
+                        : "0 3px 6px rgba(0,0,0,0.12)",
+                      zIndex: 1,
+                      cursor: "pointer",
+                    }}
+                    onMouseDown={() => onNotePlay(midiNote)}
+                  >
+                    {/* Octave label */}
+                    {wIdx === 0 && (
+                      <div
+                        className="absolute bottom-7 left-0 right-0 text-center"
+                        style={{
+                          color: isRoot ? "#ff4f1f" : "#c0bbb4",
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: 8,
+                        }}
+                      >
+                        C{startOctave + oct}
+                      </div>
+                    )}
+                    {/* Keyboard hint label */}
+                    {whiteLabel && (
+                      <div
+                        className="absolute bottom-2 left-0 right-0 text-center font-bold"
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: 9,
+                          color: isWhitePressed
+                            ? "#ff4f1f"
+                            : oct === 0
+                            ? "#ff4f1f"
+                            : oct === 1
+                            ? "#00d4ff"
+                            : "#a78bfa",
+                        }}
+                      >
+                        {whiteLabel}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Black key */}
+                  {blackSemitone !== -1 && (
                     <div
-                      className="absolute bottom-2 left-0 right-0 text-center text-xs"
+                      className="absolute transition-colors duration-75"
                       style={{
-                        color: isRoot ? "#ff4f1f" : "#8a9bb0",
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: 9,
+                        width: 24,
+                        height: 80,
+                        top: 0,
+                        left: 27,
+                        zIndex: 2,
+                        borderRadius: "0 0 3px 3px",
+                        background: isBlackPressed
+                          ? "#263660"
+                          : blackHighlighted
+                          ? blackIsRoot
+                            ? "#ff4f1f"
+                            : "#263660"
+                          : "#1a2744",
+                        boxShadow: isBlackPressed
+                          ? "inset 0 -1px 3px rgba(0,0,0,0.4)"
+                          : "0 4px 8px rgba(0,0,0,0.4)",
+                        cursor: "pointer",
                       }}
+                      onMouseDown={() => onNotePlay(blackMidi)}
                     >
-                      C{startOctave + oct}
+                      {/* Black key label */}
+                      {blackLabel && (
+                        <div
+                          className="absolute bottom-2 left-0 right-0 text-center font-bold"
+                          style={{
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: 8,
+                            color: isBlackPressed
+                              ? "#ff4f1f"
+                              : oct === 0
+                              ? "rgba(255,79,31,0.7)"
+                              : oct === 1
+                              ? "rgba(0,212,255,0.7)"
+                              : "rgba(167,139,250,0.7)",
+                          }}
+                        >
+                          {blackLabel}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-
-                {/* Black key */}
-                {blackOffset !== -1 && (
-                  <div
-                    className="piano-key-black absolute"
-                    style={{
-                      width: 22,
-                      height: 70,
-                      top: 0,
-                      left: 25,
-                      zIndex: 2,
-                      background: highlightedNotes.includes(blackOffset % 12)
-                        ? rootNote % 12 === blackOffset % 12
-                          ? "#ff4f1f"
-                          : "#263660"
-                        : "#1a2744",
-                      cursor: "pointer",
-                    }}
-                    onMouseDown={() => onNotePlay((startOctave + oct) * 12 + blackOffset)}
-                  />
-                )}
-              </div>
-            );
-          })
-        )}
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
@@ -218,7 +347,9 @@ export default function MusicTheory() {
   const [selectedChord, setSelectedChord] = useState("Major");
   const [highlightedNotes, setHighlightedNotes] = useState<number[]>([0, 2, 4, 5, 7, 9, 11]);
   const [selectedInterval, setSelectedInterval] = useState(7);
+  const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const heldNotesRef = useRef<Set<number>>(new Set());
 
   const getAudioCtx = useCallback(() => {
     if (!audioCtxRef.current) {
@@ -229,6 +360,37 @@ export default function MusicTheory() {
     }
     return audioCtxRef.current;
   }, []);
+
+  // ── Keyboard event handlers ──────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.repeat) return;
+      const key = e.key.toLowerCase();
+      const mapped = KEYBOARD_MAP[key];
+      if (!mapped) return;
+      const { midiNote } = mapped;
+      if (heldNotesRef.current.has(midiNote)) return;
+      heldNotesRef.current.add(midiNote);
+      setPressedKeys((prev) => { const next = new Set(prev); next.add(midiNote); return next; });
+      const ctx = getAudioCtx();
+      playNote(ctx, noteToFrequency(midiNote), 1.2);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const mapped = KEYBOARD_MAP[key];
+      if (!mapped) return;
+      const { midiNote } = mapped;
+      heldNotesRef.current.delete(midiNote);
+      setPressedKeys((prev) => { const next = new Set(prev); next.delete(midiNote); return next; });
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [getAudioCtx]);
 
   // Update highlighted notes when scale/chord/root changes
   useEffect(() => {
@@ -363,12 +525,13 @@ export default function MusicTheory() {
             className="text-xs font-medium mb-3 uppercase tracking-widest"
             style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
           >
-            Interactive Piano — Click to play
+            Interactive Piano — Click keys or press keyboard (Z–M · Q–U · I–P)
           </div>
           <Piano
             highlightedNotes={highlightedNotes}
             rootNote={rootNote}
             onNotePlay={handlePianoNote}
+            pressedKeys={pressedKeys}
           />
         </div>
 
