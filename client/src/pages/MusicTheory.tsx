@@ -3,7 +3,7 @@
  * Interactive piano, scales, chords, intervals, progressions
  * Uses Web Audio API for real-time sound synthesis
  */
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── Music Theory Data ────────────────────────────────────────────────────────
 
@@ -97,18 +97,153 @@ function noteToFrequency(midiNote: number): number {
   return 440 * Math.pow(2, (midiNote - 69) / 12);
 }
 
-function playNote(audioCtx: AudioContext, frequency: number, duration = 1.2) {
+// Sustain-aware note player — routes through a shared analyser node
+function playNote(
+  audioCtx: AudioContext,
+  frequency: number,
+  duration = 1.2,
+  analyser?: AnalyserNode,
+  sustainRef?: React.MutableRefObject<boolean>
+) {
   const osc = audioCtx.createOscillator();
   const gainNode = audioCtx.createGain();
   osc.connect(gainNode);
-  gainNode.connect(audioCtx.destination);
+  if (analyser) {
+    gainNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+  } else {
+    gainNode.connect(audioCtx.destination);
+  }
   osc.type = "triangle";
   osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
   gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
   gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.01);
-  gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+  const baseDuration = duration;
+  // Check sustain at the moment of scheduling
+  const effectiveDuration = sustainRef?.current ? baseDuration * 3.5 : baseDuration;
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + effectiveDuration);
   osc.start(audioCtx.currentTime);
-  osc.stop(audioCtx.currentTime + duration);
+  osc.stop(audioCtx.currentTime + effectiveDuration);
+}
+
+// ─── Scale FFT math (DFT for visualization) ───────────────────────────────────
+
+// Build a composite waveform from all scale/chord notes and compute its DFT
+function computeScaleFFT(
+  frequencies: number[],
+  sampleRate = 44100,
+  duration = 0.05,
+  bins = 64
+): { magnitudes: Float32Array; freqLabels: number[] } {
+  const N = Math.floor(sampleRate * duration);
+  const signal = new Float32Array(N);
+  // Sum all note sinusoids
+  for (const freq of frequencies) {
+    for (let i = 0; i < N; i++) {
+      signal[i] += (1 / frequencies.length) * Math.sin(2 * Math.PI * freq * (i / sampleRate));
+    }
+  }
+  // DFT over first `bins` bins
+  const magnitudes = new Float32Array(bins);
+  const freqLabels: number[] = [];
+  for (let k = 0; k < bins; k++) {
+    let re = 0, im = 0;
+    for (let n = 0; n < N; n++) {
+      const angle = (2 * Math.PI * k * n) / N;
+      re += signal[n] * Math.cos(angle);
+      im -= signal[n] * Math.sin(angle);
+    }
+    magnitudes[k] = Math.sqrt(re * re + im * im) / N;
+    freqLabels.push(Math.round((k * sampleRate) / N));
+  }
+  return { magnitudes, freqLabels };
+}
+
+// ─── Scale FFT Canvas Renderer ────────────────────────────────────────────────
+
+function drawScaleSpectrum(
+  canvas: HTMLCanvasElement,
+  magnitudes: Float32Array,
+  noteFrequencies: number[],
+  noteNames: string[],
+  sampleRate: number,
+  totalSamples: number
+) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Background
+  ctx.fillStyle = "#0d1829";
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid lines
+  ctx.strokeStyle = "rgba(0,212,255,0.08)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (H / 4) * i;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  const bins = magnitudes.length;
+  const barW = Math.max(1, W / bins - 1);
+  const maxVal = Math.max(...Array.from(magnitudes), 0.0001);
+
+  // Draw bars
+  for (let i = 0; i < bins; i++) {
+    const normalized = magnitudes[i] / maxVal;
+    const barH = normalized * H * 0.85;
+    const x = i * (W / bins);
+    const t = i / bins;
+    const r = Math.round(t * 255);
+    const g = Math.round(212 - t * 130);
+    const b = Math.round(255 - t * 224);
+    ctx.fillStyle = `rgba(${r},${g},${b},${0.4 + normalized * 0.6})`;
+    ctx.fillRect(x, H - barH, barW, barH);
+  }
+
+  // Overlay note frequency markers
+  noteFrequencies.forEach((freq, idx) => {
+    // Find which bin this frequency falls in
+    const binIndex = Math.round((freq * totalSamples) / sampleRate);
+    if (binIndex < 0 || binIndex >= bins) return;
+    const x = binIndex * (W / bins) + barW / 2;
+    const normalized = magnitudes[binIndex] / maxVal;
+    const barH = normalized * H * 0.85;
+
+    // Spike marker
+    ctx.strokeStyle = "#ff4f1f";
+    ctx.lineWidth = 2;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = "#ff4f1f";
+    ctx.beginPath();
+    ctx.moveTo(x, H);
+    ctx.lineTo(x, H - barH - 4);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Note label
+    ctx.fillStyle = "#ff4f1f";
+    ctx.font = `bold 9px 'IBM Plex Mono', monospace`;
+    ctx.textAlign = "center";
+    const labelY = Math.max(12, H - barH - 8);
+    ctx.fillText(noteNames[idx], x, labelY);
+
+    // Frequency label below
+    ctx.fillStyle = "rgba(255,79,31,0.6)";
+    ctx.font = `8px 'IBM Plex Mono', monospace`;
+    ctx.fillText(`${Math.round(freq)}`, x, H - 2);
+  });
+
+  // X-axis label
+  ctx.fillStyle = "rgba(138,155,176,0.5)";
+  ctx.font = "9px 'IBM Plex Mono', monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("Frequency →", 4, H - 2);
+  ctx.textAlign = "right";
+  ctx.fillText(`${Math.round((bins * sampleRate) / totalSamples)} Hz`, W - 4, H - 2);
 }
 
 // ─── Piano Component ──────────────────────────────────────────────────────────
@@ -348,12 +483,23 @@ export default function MusicTheory() {
   const [highlightedNotes, setHighlightedNotes] = useState<number[]>([0, 2, 4, 5, 7, 9, 11]);
   const [selectedInterval, setSelectedInterval] = useState(7);
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
+  const [sustainActive, setSustainActive] = useState(false);
+  const [showFFT, setShowFFT] = useState(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const heldNotesRef = useRef<Set<number>>(new Set());
+  const sustainRef = useRef(false);
+  const fftCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   const getAudioCtx = useCallback(() => {
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Create shared analyser
+      const analyser = audioCtxRef.current.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.connect(audioCtxRef.current.destination);
+      analyserRef.current = analyser;
     }
     if (audioCtxRef.current.state === "suspended") {
       audioCtxRef.current.resume();
@@ -361,10 +507,19 @@ export default function MusicTheory() {
     return audioCtxRef.current;
   }, []);
 
-  // ── Keyboard event handlers ──────────────────────────────────────────────
+  // ── Keyboard event handlers (notes + sustain pedal) ──────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Sustain pedal: Space
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (!e.repeat) {
+          sustainRef.current = true;
+          setSustainActive(true);
+        }
+        return;
+      }
       if (e.repeat) return;
       const key = e.key.toLowerCase();
       const mapped = KEYBOARD_MAP[key];
@@ -374,9 +529,14 @@ export default function MusicTheory() {
       heldNotesRef.current.add(midiNote);
       setPressedKeys((prev) => { const next = new Set(prev); next.add(midiNote); return next; });
       const ctx = getAudioCtx();
-      playNote(ctx, noteToFrequency(midiNote), 1.2);
+      playNote(ctx, noteToFrequency(midiNote), 1.2, analyserRef.current ?? undefined, sustainRef);
     };
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        sustainRef.current = false;
+        setSustainActive(false);
+        return;
+      }
       const key = e.key.toLowerCase();
       const mapped = KEYBOARD_MAP[key];
       if (!mapped) return;
@@ -407,13 +567,120 @@ export default function MusicTheory() {
     }
   }, [activeTab, rootNote, selectedScale, selectedChord, selectedInterval]);
 
+  // ── Static FFT: compute from scale/chord frequencies and draw on canvas ───────────────
+  const SAMPLE_RATE = 44100;
+  const FFT_DURATION = 0.08; // seconds of signal to analyze
+  const FFT_BINS = 80;
+  const FFT_TOTAL_SAMPLES = Math.floor(SAMPLE_RATE * FFT_DURATION);
+
+  const drawFFT = useCallback(() => {
+    const canvas = fftCanvasRef.current;
+    if (!canvas) return;
+    canvas.width = canvas.offsetWidth || 700;
+    canvas.height = 160;
+
+    // Determine which notes to analyze
+    let intervals: number[];
+    let label: string;
+    if (activeTab === "scales") {
+      intervals = SCALES[selectedScale].intervals;
+      label = `${NOTE_NAMES[rootNote]} ${selectedScale}`;
+    } else if (activeTab === "chords") {
+      intervals = CHORD_TYPES[selectedChord].intervals;
+      label = `${NOTE_NAMES[rootNote]}${CHORD_TYPES[selectedChord].symbol}`;
+    } else if (activeTab === "intervals") {
+      intervals = [0, selectedInterval];
+      label = `${NOTE_NAMES[rootNote]} + ${INTERVALS[selectedInterval].name}`;
+    } else {
+      intervals = [0, 4, 7]; // default C major
+      label = "C Major";
+    }
+
+    const baseOctave = 4;
+    const frequencies = intervals.map((i) => noteToFrequency(baseOctave * 12 + rootNote + i));
+    const noteNames = intervals.map((i) => NOTE_NAMES[(rootNote + i) % 12]);
+
+    const { magnitudes } = computeScaleFFT(frequencies, SAMPLE_RATE, FFT_DURATION, FFT_BINS);
+    drawScaleSpectrum(canvas, magnitudes, frequencies, noteNames, SAMPLE_RATE, FFT_TOTAL_SAMPLES);
+
+    // Draw title overlay
+    const ctx2d = canvas.getContext("2d");
+    if (ctx2d) {
+      ctx2d.fillStyle = "rgba(255,255,255,0.7)";
+      ctx2d.font = "bold 11px 'IBM Plex Mono', monospace";
+      ctx2d.textAlign = "left";
+      ctx2d.fillText(`FFT — ${label}`, 8, 14);
+    }
+  }, [activeTab, rootNote, selectedScale, selectedChord, selectedInterval]);
+
+  // Redraw FFT whenever selection changes
+  useEffect(() => {
+    if (!showFFT) return;
+    const id = setTimeout(() => drawFFT(), 20);
+    return () => clearTimeout(id);
+  }, [drawFFT, showFFT]);
+
+  // Live FFT animation from AnalyserNode (when audio is playing)
+  useEffect(() => {
+    if (!showFFT) return;
+    let rafId: number;
+    const animate = () => {
+      const analyser = analyserRef.current;
+      const canvas = fftCanvasRef.current;
+      if (analyser && canvas) {
+        const bufLen = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufLen);
+        analyser.getByteFrequencyData(dataArray);
+        // Check if any audio is playing (non-zero data)
+        const hasAudio = dataArray.some((v) => v > 0);
+        if (hasAudio) {
+          canvas.width = canvas.offsetWidth || 700;
+          canvas.height = 160;
+          const ctx2d = canvas.getContext("2d");
+          if (!ctx2d) { rafId = requestAnimationFrame(animate); return; }
+          const W = canvas.width, H = canvas.height;
+          ctx2d.fillStyle = "#0d1829";
+          ctx2d.fillRect(0, 0, W, H);
+          // Grid
+          ctx2d.strokeStyle = "rgba(0,212,255,0.08)";
+          ctx2d.lineWidth = 1;
+          for (let i = 0; i <= 4; i++) {
+            const y = (H / 4) * i;
+            ctx2d.beginPath(); ctx2d.moveTo(0, y); ctx2d.lineTo(W, y); ctx2d.stroke();
+          }
+          // Draw live spectrum bars (first 256 bins = up to ~5.5kHz)
+          const displayBins = Math.min(256, bufLen);
+          const barW = W / displayBins;
+          for (let i = 0; i < displayBins; i++) {
+            const normalized = dataArray[i] / 255;
+            const barH = normalized * H * 0.9;
+            const x = i * barW;
+            const t = i / displayBins;
+            const r = Math.round(t * 255);
+            const g = Math.round(212 - t * 130);
+            const b = Math.round(255 - t * 224);
+            ctx2d.fillStyle = `rgba(${r},${g},${b},${0.4 + normalized * 0.6})`;
+            ctx2d.fillRect(x, H - barH, barW - 1, barH);
+          }
+          ctx2d.fillStyle = "rgba(0,212,255,0.8)";
+          ctx2d.font = "bold 11px 'IBM Plex Mono', monospace";
+          ctx2d.textAlign = "left";
+          ctx2d.fillText("LIVE FFT — Real-time Spectrum", 8, 14);
+        }
+      }
+      rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [showFFT]);
+
   const playScale = () => {
     const ctx = getAudioCtx();
     const scale = SCALES[selectedScale];
     const baseOctave = 4;
     scale.intervals.forEach((interval, i) => {
       const freq = noteToFrequency(baseOctave * 12 + rootNote + interval);
-      setTimeout(() => playNote(ctx, freq, 0.6), i * 220);
+      setTimeout(() => playNote(ctx, freq, sustainRef.current ? 2.5 : 0.6, analyserRef.current ?? undefined, sustainRef), i * 220);
     });
   };
 
@@ -423,26 +690,26 @@ export default function MusicTheory() {
     const baseOctave = 4;
     chord.intervals.forEach((interval) => {
       const freq = noteToFrequency(baseOctave * 12 + rootNote + interval);
-      playNote(ctx, freq, 1.5);
+      playNote(ctx, freq, 1.5, analyserRef.current ?? undefined, sustainRef);
     });
   };
 
   const playInterval = () => {
     const ctx = getAudioCtx();
     const baseOctave = 4;
-    playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote), 0.8);
+    playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote), 0.8, analyserRef.current ?? undefined, sustainRef);
     setTimeout(() => {
-      playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote + selectedInterval), 0.8);
+      playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote + selectedInterval), 0.8, analyserRef.current ?? undefined, sustainRef);
     }, 600);
     setTimeout(() => {
-      playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote), 1.2);
-      playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote + selectedInterval), 1.2);
+      playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote), 1.2, analyserRef.current ?? undefined, sustainRef);
+      playNote(ctx, noteToFrequency(baseOctave * 12 + rootNote + selectedInterval), 1.2, analyserRef.current ?? undefined, sustainRef);
     }, 1400);
   };
 
   const handlePianoNote = (midiNote: number) => {
     const ctx = getAudioCtx();
-    playNote(ctx, noteToFrequency(midiNote), 1.0);
+    playNote(ctx, noteToFrequency(midiNote), 1.0, analyserRef.current ?? undefined, sustainRef);
   };
 
   const tabs: { id: Tab; label: string }[] = [
@@ -518,14 +785,38 @@ export default function MusicTheory() {
 
         {/* Interactive Piano */}
         <div
-          className="module-card rounded p-4 mb-6 overflow-x-auto"
+          className="module-card rounded p-4 mb-3 overflow-x-auto"
           style={{ background: "white" }}
         >
-          <div
-            className="text-xs font-medium mb-3 uppercase tracking-widest"
-            style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
-          >
-            Interactive Piano — Click keys or press keyboard (Z–M · Q–U · I–P)
+          <div className="flex items-center justify-between mb-3">
+            <div
+              className="text-xs font-medium uppercase tracking-widest"
+              style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              Interactive Piano — Click keys or press keyboard (Z–M · Q–U · I–P)
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Sustain indicator */}
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all"
+                style={{
+                  background: sustainActive ? "rgba(0,212,255,0.15)" : "rgba(138,155,176,0.1)",
+                  border: `1px solid ${sustainActive ? "#00d4ff" : "rgba(138,155,176,0.3)"}`,
+                  color: sustainActive ? "#00d4ff" : "#8a9bb0",
+                  fontFamily: "'IBM Plex Mono', monospace",
+                }}
+              >
+                <span
+                  style={{
+                    width: 6, height: 6, borderRadius: "50%",
+                    background: sustainActive ? "#00d4ff" : "#8a9bb0",
+                    display: "inline-block",
+                    boxShadow: sustainActive ? "0 0 6px #00d4ff" : "none",
+                  }}
+                />
+                SUSTAIN {sustainActive ? "ON" : "OFF"} — SPACE
+              </div>
+            </div>
           </div>
           <Piano
             highlightedNotes={highlightedNotes}
@@ -533,6 +824,42 @@ export default function MusicTheory() {
             onNotePlay={handlePianoNote}
             pressedKeys={pressedKeys}
           />
+        </div>
+
+        {/* FFT Spectrum Analyzer */}
+        <div
+          className="module-card rounded p-4 mb-6"
+          style={{ background: "#0d1829", border: "1px solid rgba(0,212,255,0.15)" }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div
+              className="text-xs font-medium uppercase tracking-widest"
+              style={{ color: "#00d4ff", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              FFT Spectrum Analyzer
+              <span style={{ color: "rgba(0,212,255,0.5)", marginLeft: 8 }}>
+                — static: scale/chord frequencies · live: updates during playback
+              </span>
+            </div>
+            <button
+              onClick={() => setShowFFT((v) => !v)}
+              className="text-xs px-2 py-1 rounded transition-all"
+              style={{
+                background: showFFT ? "rgba(0,212,255,0.15)" : "rgba(138,155,176,0.1)",
+                color: showFFT ? "#00d4ff" : "#8a9bb0",
+                border: `1px solid ${showFFT ? "rgba(0,212,255,0.3)" : "rgba(138,155,176,0.2)"}`,
+                fontFamily: "'IBM Plex Mono', monospace",
+              }}
+            >
+              {showFFT ? "Hide" : "Show"}
+            </button>
+          </div>
+          {showFFT && (
+            <canvas
+              ref={fftCanvasRef}
+              style={{ width: "100%", height: 160, display: "block", borderRadius: 4 }}
+            />
+          )}
         </div>
 
         {/* Tabs */}
