@@ -3,7 +3,7 @@
  * Bauhaus Frequency: chalk bg, navy accents, signal orange CTAs
  */
 import { Link } from "wouter";
-import { Music, Activity, Waves, ArrowRight, Zap } from "lucide-react";
+import { Music, Activity, Waves, ArrowRight, Zap, Github } from "lucide-react";
 
 const modules = [
   {
@@ -209,7 +209,7 @@ export default function Home() {
         className="mx-8 mb-12 rounded p-6"
         style={{ background: "#1a2744" }}
       >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-5">
           {[
             { label: "Speed of Sound (air, 20°C)", value: "343 m/s" },
             { label: "Concert A Pitch", value: "440 Hz" },
@@ -228,6 +228,46 @@ export default function Home() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* References & GitHub */}
+        <div
+          className="pt-4 flex flex-wrap items-center justify-between gap-3"
+          style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <div
+            className="text-xs flex flex-wrap gap-x-4 gap-y-1"
+            style={{ color: "rgba(138,155,176,0.55)", fontFamily: "'IBM Plex Mono', monospace" }}
+          >
+            <span>ISO 16 · A4 = 440 Hz</span>
+            <span>MIDI 1.0 Spec · MMA/AMEI 1983</span>
+            <span>f = 440×2^((n−69)/12)</span>
+            <span>DFT: X[k] = Σ x[n]·e^(−j2πkn/N)</span>
+          </div>
+          <a
+            href="https://github.com/randommysticalperson/music-science-app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded text-xs font-medium transition-all"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#c8d3e0",
+              textDecoration: "none",
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.12)";
+              (e.currentTarget as HTMLAnchorElement).style.color = "white";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)";
+              (e.currentTarget as HTMLAnchorElement).style.color = "#c8d3e0";
+            }}
+          >
+            <Github size={13} />
+            View Source on GitHub
+          </a>
         </div>
       </div>
     </div>

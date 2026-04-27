@@ -1012,10 +1012,27 @@ export default function MusicTheory() {
                   </tbody>
                 </table>
                 <div
-                  className="mt-2 text-xs"
+                  className="mt-2 text-xs flex flex-wrap items-center gap-x-3 gap-y-1"
                   style={{ color: "rgba(138,155,176,0.4)", fontFamily: "'IBM Plex Mono', monospace" }}
                 >
-                  Wavelength calculated at 343 m/s (speed of sound in air at 20°C) · MIDI 60 = C4 = 261.63 Hz · A4 = MIDI 69 = 440 Hz (ISO 16)
+                  <span>Wavelength at 343 m/s (20°C)</span>
+                  <span>·</span>
+                  <span>MIDI 60 = C4 = 261.63 Hz</span>
+                  <span>·</span>
+                  <span>A4 = MIDI 69 = 440 Hz (ISO 16)</span>
+                  <span>·</span>
+                  <span>f = 440×2^((n−69)/12)</span>
+                  <span>·</span>
+                  <a
+                    href="https://github.com/randommysticalperson/music-science-app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "rgba(0,212,255,0.6)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#00d4ff"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(0,212,255,0.6)"; }}
+                  >
+                    ↗ Source on GitHub
+                  </a>
                 </div>
               </div>
             </>

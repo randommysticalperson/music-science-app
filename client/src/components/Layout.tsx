@@ -4,7 +4,7 @@
  * Persistent left nav with module icons
  */
 import { Link, useLocation } from "wouter";
-import { Music, Activity, Waves, Home, Menu, X } from "lucide-react";
+import { Music, Activity, Waves, Home, Menu, X, Github } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
@@ -115,10 +115,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             fontFamily: "'IBM Plex Mono', monospace",
           }}
         >
-          <div>Music Theory</div>
-          <div>Signal Processing</div>
-          <div>Acoustics</div>
-          <div className="mt-2" style={{ color: "rgba(138,155,176,0.5)" }}>
+          {/* GitHub link */}
+          <a
+            href="https://github.com/randommysticalperson/music-science-app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 mb-3 px-3 py-2 rounded transition-all"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#c8d3e0",
+              textDecoration: "none",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.1)";
+              (e.currentTarget as HTMLAnchorElement).style.color = "white";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)";
+              (e.currentTarget as HTMLAnchorElement).style.color = "#c8d3e0";
+            }}
+          >
+            <Github size={13} />
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>View Source on GitHub</span>
+          </a>
+
+          {/* Reference standards */}
+          <div className="space-y-0.5 mb-2" style={{ color: "rgba(138,155,176,0.6)", fontSize: 10 }}>
+            <div>ISO 16 · A4 = 440 Hz tuning</div>
+            <div>MIDI 1.0 Spec · MMA/AMEI 1983</div>
+            <div>Equal temperament · f = 440·2^((n-69)/12)</div>
+            <div>v<sub>sound</sub> = 343 m/s at 20°C</div>
+          </div>
+
+          <div className="mt-2" style={{ color: "rgba(138,155,176,0.35)" }}>
             © 2026 SoundLab
           </div>
         </div>
