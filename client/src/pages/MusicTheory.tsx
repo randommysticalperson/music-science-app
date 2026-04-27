@@ -168,7 +168,9 @@ function drawScaleSpectrum(
   noteFrequencies: number[],
   noteNames: string[],
   sampleRate: number,
-  totalSamples: number
+  totalSamples: number,
+  intervalAbbrs?: string[],   // e.g. ["Root", "M3", "P5"]
+  midiNotes?: number[]        // e.g. [60, 64, 67]
 ) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -179,7 +181,7 @@ function drawScaleSpectrum(
   ctx.fillStyle = "#0d1829";
   ctx.fillRect(0, 0, W, H);
 
-  // Grid lines
+  // Horizontal grid lines
   ctx.strokeStyle = "rgba(0,212,255,0.08)";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
@@ -191,59 +193,85 @@ function drawScaleSpectrum(
   const barW = Math.max(1, W / bins - 1);
   const maxVal = Math.max(...Array.from(magnitudes), 0.0001);
 
-  // Draw bars
+  // Draw spectrum bars
   for (let i = 0; i < bins; i++) {
     const normalized = magnitudes[i] / maxVal;
-    const barH = normalized * H * 0.85;
+    const barH = normalized * H * 0.75;  // leave headroom for labels
     const x = i * (W / bins);
     const t = i / bins;
     const r = Math.round(t * 255);
     const g = Math.round(212 - t * 130);
     const b = Math.round(255 - t * 224);
-    ctx.fillStyle = `rgba(${r},${g},${b},${0.4 + normalized * 0.6})`;
+    ctx.fillStyle = `rgba(${r},${g},${b},${0.35 + normalized * 0.55})`;
     ctx.fillRect(x, H - barH, barW, barH);
   }
 
-  // Overlay note frequency markers
+  // ── Note spike markers with stacked reference labels ──────────────────────
   noteFrequencies.forEach((freq, idx) => {
-    // Find which bin this frequency falls in
     const binIndex = Math.round((freq * totalSamples) / sampleRate);
     if (binIndex < 0 || binIndex >= bins) return;
     const x = binIndex * (W / bins) + barW / 2;
     const normalized = magnitudes[binIndex] / maxVal;
-    const barH = normalized * H * 0.85;
+    const barH = normalized * H * 0.75;
 
-    // Spike marker
+    // Glowing vertical spike
     ctx.strokeStyle = "#ff4f1f";
     ctx.lineWidth = 2;
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 10;
     ctx.shadowColor = "#ff4f1f";
     ctx.beginPath();
-    ctx.moveTo(x, H);
+    ctx.moveTo(x, H - 14);          // stop above Hz row
     ctx.lineTo(x, H - barH - 4);
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Note label
+    // Diamond marker at spike top
+    const tipY = H - barH - 6;
     ctx.fillStyle = "#ff4f1f";
-    ctx.font = `bold 9px 'IBM Plex Mono', monospace`;
-    ctx.textAlign = "center";
-    const labelY = Math.max(12, H - barH - 8);
-    ctx.fillText(noteNames[idx], x, labelY);
+    ctx.beginPath();
+    ctx.moveTo(x, tipY - 4);
+    ctx.lineTo(x + 3, tipY);
+    ctx.lineTo(x, tipY + 4);
+    ctx.lineTo(x - 3, tipY);
+    ctx.closePath();
+    ctx.fill();
 
-    // Frequency label below
-    ctx.fillStyle = "rgba(255,79,31,0.6)";
+    // ── Stacked label block above bar ──
+    ctx.textAlign = "center";
+    let labelTop = Math.max(60, H - barH - 14);
+
+    // Row 1: Interval abbreviation (e.g. "Root", "M3", "P5")
+    if (intervalAbbrs && intervalAbbrs[idx]) {
+      ctx.fillStyle = "rgba(167,139,250,0.95)";
+      ctx.font = `bold 8px 'IBM Plex Mono', monospace`;
+      ctx.fillText(intervalAbbrs[idx], x, labelTop - 28);
+    }
+
+    // Row 2: Note name (e.g. "C", "E", "G")
+    ctx.fillStyle = "#ff4f1f";
+    ctx.font = `bold 10px 'IBM Plex Mono', monospace`;
+    ctx.fillText(noteNames[idx], x, labelTop - 16);
+
+    // Row 3: MIDI number
+    if (midiNotes && midiNotes[idx] !== undefined) {
+      ctx.fillStyle = "rgba(0,212,255,0.7)";
+      ctx.font = `8px 'IBM Plex Mono', monospace`;
+      ctx.fillText(`M${midiNotes[idx]}`, x, labelTop - 6);
+    }
+
+    // Row 4: Hz value (bottom strip)
+    ctx.fillStyle = "rgba(255,79,31,0.75)";
     ctx.font = `8px 'IBM Plex Mono', monospace`;
-    ctx.fillText(`${Math.round(freq)}`, x, H - 2);
+    ctx.fillText(`${freq.toFixed(1)}`, x, H - 3);
   });
 
-  // X-axis label
-  ctx.fillStyle = "rgba(138,155,176,0.5)";
-  ctx.font = "9px 'IBM Plex Mono', monospace";
+  // ── Axis labels ────────────────────────────────────────────────────────────
+  ctx.fillStyle = "rgba(138,155,176,0.45)";
+  ctx.font = "8px 'IBM Plex Mono', monospace";
   ctx.textAlign = "left";
-  ctx.fillText("Frequency →", 4, H - 2);
+  ctx.fillText("Hz →", 4, H - 3);
   ctx.textAlign = "right";
-  ctx.fillText(`${Math.round((bins * sampleRate) / totalSamples)} Hz`, W - 4, H - 2);
+  ctx.fillText(`max ${Math.round((bins * sampleRate) / totalSamples)} Hz`, W - 4, H - 3);
 }
 
 // ─── Piano Component ──────────────────────────────────────────────────────────
@@ -577,7 +605,7 @@ export default function MusicTheory() {
     const canvas = fftCanvasRef.current;
     if (!canvas) return;
     canvas.width = canvas.offsetWidth || 700;
-    canvas.height = 160;
+    canvas.height = 200;  // taller to fit stacked labels
 
     // Determine which notes to analyze
     let intervals: number[];
@@ -599,17 +627,36 @@ export default function MusicTheory() {
     const baseOctave = 4;
     const frequencies = intervals.map((i) => noteToFrequency(baseOctave * 12 + rootNote + i));
     const noteNames = intervals.map((i) => NOTE_NAMES[(rootNote + i) % 12]);
+    const midiNotes = intervals.map((i) => baseOctave * 12 + rootNote + i);
+
+    // Build interval abbreviation labels
+    // "Root" for 0, then look up INTERVALS array for the rest
+    const intervalAbbrs = intervals.map((semitones) => {
+      if (semitones === 0) return "Root";
+      const found = INTERVALS.find((iv) => iv.semitones === (semitones % 12));
+      return found ? found.abbr : `+${semitones}`;
+    });
 
     const { magnitudes } = computeScaleFFT(frequencies, SAMPLE_RATE, FFT_DURATION, FFT_BINS);
-    drawScaleSpectrum(canvas, magnitudes, frequencies, noteNames, SAMPLE_RATE, FFT_TOTAL_SAMPLES);
+    drawScaleSpectrum(canvas, magnitudes, frequencies, noteNames, SAMPLE_RATE, FFT_TOTAL_SAMPLES, intervalAbbrs, midiNotes);
 
     // Draw title overlay
     const ctx2d = canvas.getContext("2d");
     if (ctx2d) {
-      ctx2d.fillStyle = "rgba(255,255,255,0.7)";
+      ctx2d.fillStyle = "rgba(255,255,255,0.75)";
       ctx2d.font = "bold 11px 'IBM Plex Mono', monospace";
       ctx2d.textAlign = "left";
       ctx2d.fillText(`FFT — ${label}`, 8, 14);
+      // Legend
+      ctx2d.font = "8px 'IBM Plex Mono', monospace";
+      ctx2d.fillStyle = "rgba(167,139,250,0.8)";
+      ctx2d.fillText("■ Interval", 8, 26);
+      ctx2d.fillStyle = "rgba(255,79,31,0.8)";
+      ctx2d.fillText("■ Note", 68, 26);
+      ctx2d.fillStyle = "rgba(0,212,255,0.8)";
+      ctx2d.fillText("■ MIDI", 108, 26);
+      ctx2d.fillStyle = "rgba(255,79,31,0.55)";
+      ctx2d.fillText("■ Hz (bottom)", 148, 26);
     }
   }, [activeTab, rootNote, selectedScale, selectedChord, selectedInterval]);
 
@@ -855,10 +902,123 @@ export default function MusicTheory() {
             </button>
           </div>
           {showFFT && (
-            <canvas
-              ref={fftCanvasRef}
-              style={{ width: "100%", height: 160, display: "block", borderRadius: 4 }}
-            />
+            <>
+              <canvas
+                ref={fftCanvasRef}
+                style={{ width: "100%", height: 200, display: "block", borderRadius: 4 }}
+              />
+
+              {/* ── Frequency Reference Table ── */}
+              <div className="mt-3 overflow-x-auto">
+                <div
+                  className="text-xs font-medium uppercase tracking-widest mb-2"
+                  style={{ color: "rgba(0,212,255,0.6)", fontFamily: "'IBM Plex Mono', monospace" }}
+                >
+                  Frequency Reference
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(0,212,255,0.15)" }}>
+                      {["#", "Note", "Interval", "Abbr", "MIDI", "Freq (Hz)", "Wavelength (cm)", "Ratio", "Consonance"].map((h) => (
+                        <th
+                          key={h}
+                          style={{
+                            textAlign: "left",
+                            padding: "4px 8px",
+                            color: "rgba(138,155,176,0.7)",
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      // Compute the same intervals as drawFFT
+                      let intervals: number[];
+                      if (activeTab === "scales") intervals = SCALES[selectedScale].intervals;
+                      else if (activeTab === "chords") intervals = CHORD_TYPES[selectedChord].intervals;
+                      else if (activeTab === "intervals") intervals = [0, selectedInterval];
+                      else intervals = [0, 4, 7];
+
+                      const baseOctave = 4;
+                      const SPEED_OF_SOUND = 34300; // cm/s at 20°C
+
+                      return intervals.map((semitones, idx) => {
+                        const midi = baseOctave * 12 + rootNote + semitones;
+                        const freq = noteToFrequency(midi);
+                        const noteName = NOTE_NAMES[(rootNote + semitones) % 12];
+                        const wavelength = (SPEED_OF_SOUND / freq).toFixed(1);
+                        const ivData = INTERVALS.find((iv) => iv.semitones === (semitones % 12));
+                        const intervalName = semitones === 0 ? "Unison (Root)" : ivData ? ivData.name : `+${semitones} st`;
+                        const abbr = semitones === 0 ? "P1" : ivData ? ivData.abbr : `+${semitones}`;
+                        const ratio = ivData ? ivData.ratio : "—";
+                        const consonance = ivData ? ivData.consonance : "—";
+
+                        const consonanceColor = (c: string) => {
+                          if (c === "Perfect") return "#00d4ff";
+                          if (c === "Imperfect") return "#a78bfa";
+                          if (c === "Mild Dissonance") return "#fbbf24";
+                          return "#ff4f1f";
+                        };
+
+                        return (
+                          <tr
+                            key={idx}
+                            style={{
+                              borderBottom: "1px solid rgba(255,255,255,0.04)",
+                              background: idx % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent",
+                            }}
+                          >
+                            <td style={{ padding: "5px 8px", color: "rgba(138,155,176,0.5)" }}>{idx + 1}</td>
+                            <td style={{ padding: "5px 8px", color: "#ff4f1f", fontWeight: 700, fontSize: 13 }}>
+                              {noteName}<span style={{ color: "rgba(138,155,176,0.5)", fontSize: 10, marginLeft: 2 }}>{4 + Math.floor((rootNote + semitones) / 12)}</span>
+                            </td>
+                            <td style={{ padding: "5px 8px", color: "rgba(255,255,255,0.75)" }}>{intervalName}</td>
+                            <td style={{ padding: "5px 8px" }}>
+                              <span
+                                style={{
+                                  background: "rgba(167,139,250,0.15)",
+                                  color: "#a78bfa",
+                                  border: "1px solid rgba(167,139,250,0.3)",
+                                  borderRadius: 3,
+                                  padding: "1px 5px",
+                                  fontSize: 10,
+                                }}
+                              >
+                                {abbr}
+                              </span>
+                            </td>
+                            <td style={{ padding: "5px 8px", color: "#00d4ff" }}>{midi}</td>
+                            <td style={{ padding: "5px 8px", color: "rgba(255,255,255,0.9)", fontWeight: 600 }}>
+                              {freq.toFixed(2)}
+                              <span style={{ color: "rgba(138,155,176,0.5)", fontSize: 9, marginLeft: 2 }}>Hz</span>
+                            </td>
+                            <td style={{ padding: "5px 8px", color: "rgba(255,255,255,0.55)" }}>
+                              {wavelength}
+                              <span style={{ color: "rgba(138,155,176,0.4)", fontSize: 9, marginLeft: 2 }}>cm</span>
+                            </td>
+                            <td style={{ padding: "5px 8px", color: "rgba(255,255,255,0.6)" }}>{ratio}</td>
+                            <td style={{ padding: "5px 8px" }}>
+                              <span style={{ color: consonanceColor(consonance), fontSize: 10 }}>{consonance}</span>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+                <div
+                  className="mt-2 text-xs"
+                  style={{ color: "rgba(138,155,176,0.4)", fontFamily: "'IBM Plex Mono', monospace" }}
+                >
+                  Wavelength calculated at 343 m/s (speed of sound in air at 20°C) · MIDI 60 = C4 = 261.63 Hz · A4 = MIDI 69 = 440 Hz (ISO 16)
+                </div>
+              </div>
+            </>
           )}
         </div>
 
