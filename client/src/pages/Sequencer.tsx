@@ -119,18 +119,25 @@ function getAudioCtx(): AudioContext {
   return new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
 }
 
-function playNote(ctx: AudioContext, midi: number, startTime: number, duration: number, gain = 0.5) {
+function playNote(ctx: AudioContext, midi: number, startTime: number, duration: number, gain = 0.5, waveform: OscillatorType = "triangle") {
   const osc = ctx.createOscillator();
   const gainNode = ctx.createGain();
   osc.connect(gainNode);
   gainNode.connect(ctx.destination);
-  osc.type = "triangle";
+  osc.type = waveform;
   osc.frequency.value = midiToFreq(midi);
   gainNode.gain.setValueAtTime(gain, startTime);
   gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.9);
   osc.start(startTime);
   osc.stop(startTime + duration);
 }
+
+const WAVEFORMS: { type: OscillatorType; label: string; desc: string; color: string }[] = [
+  { type: "sine",     label: "Sine",     desc: "Pure tone · single harmonic",       color: "#00d4ff" },
+  { type: "triangle", label: "Triangle", desc: "Odd harmonics · soft timbre",        color: "#4ade80" },
+  { type: "square",   label: "Square",   desc: "Odd harmonics · bright/hollow",      color: "#a78bfa" },
+  { type: "sawtooth", label: "Sawtooth", desc: "All harmonics · rich/buzzy",         color: "#ff4f1f" },
+];
 
 function buildSequenceJSON(
   grid: boolean[][],
@@ -170,10 +177,13 @@ function ComposerTab() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [copied, setCopied] = useState(false);
+  const [waveform, setWaveform] = useState<OscillatorType>("triangle");
   const ctxRef = useRef<AudioContext | null>(null);
   const schedulerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stepRef = useRef(0);
   const nextBeatTimeRef = useRef(0);
+  const waveformRef = useRef<OscillatorType>("triangle");
+  useEffect(() => { waveformRef.current = waveform; }, [waveform]);
 
   const toggleCell = useCallback((row: number, col: number) => {
     setGrid((g) => {
@@ -207,7 +217,7 @@ function ComposerTab() {
       const step = stepRef.current;
       PIANO_ROLL_NOTES.forEach((note, rowIdx) => {
         if (grid[rowIdx][step]) {
-          playNote(ctx, note.midi, nextBeatTimeRef.current, secPerStep * 0.85, 0.4);
+          playNote(ctx, note.midi, nextBeatTimeRef.current, secPerStep * 0.85, 0.4, waveformRef.current);
         }
       });
       setCurrentStep(step);
@@ -322,6 +332,30 @@ function ComposerTab() {
             {isPlaying ? <><Square size={12} /> Stop</> : <><Play size={12} /> Play</>}
           </button>
         </div>
+      </div>
+
+      {/* Waveform Selector */}
+      <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg" style={{ background: "rgba(26,39,68,0.06)", border: "1px solid rgba(26,39,68,0.12)" }}>
+        <span className="text-xs font-semibold shrink-0" style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}>Waveform</span>
+        {WAVEFORMS.map((w) => (
+          <button
+            key={w.type}
+            onClick={() => setWaveform(w.type)}
+            title={w.desc}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all"
+            style={{
+              background: waveform === w.type ? `${w.color}22` : "transparent",
+              color: waveform === w.type ? w.color : "#4a5a7a",
+              border: `1px solid ${waveform === w.type ? w.color : "rgba(26,39,68,0.15)"}`,
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            {w.label}
+          </button>
+        ))}
+        <span className="text-xs ml-2" style={{ color: "rgba(138,155,176,0.6)", fontFamily: "'IBM Plex Mono', monospace" }}>
+          {WAVEFORMS.find((w) => w.type === waveform)?.desc}
+        </span>
       </div>
 
       {/* Piano Roll Grid */}
@@ -806,14 +840,118 @@ function parseSequenceJSON(raw: string): { ok: true; seq: ParsedSequence } | { o
   }
 }
 
-function VisualizerTab() {
-  const [jsonInput, setJsonInput] = useState(DEMO_JSON);
+// ─── MusicXML → soundio/sequence converter ───────────────────────────────────
+
+function musicXmlToSequenceJSON(xmlStr: string): string {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlStr, "application/xml");
+    const parseError = doc.querySelector("parsererror");
+    if (parseError) throw new Error("Invalid XML");
+
+    const title = doc.querySelector("work-title, movement-title, credit-words")?.textContent?.trim() ?? "MusicXML Import";
+
+    // Get divisions (ticks per quarter note)
+    const divisionsEl = doc.querySelector("divisions");
+    const divisions = divisionsEl ? parseInt(divisionsEl.textContent ?? "1") : 1;
+
+    // Get tempo from sound element or default 120
+    const soundEl = doc.querySelector("sound[tempo]");
+    const bpm = soundEl ? parseFloat(soundEl.getAttribute("tempo") ?? "120") : 120;
+
+    // Get time signature
+    const beatsEl = doc.querySelector("beats");
+    const beatTypeEl = doc.querySelector("beat-type");
+    const timeNum = beatsEl ? parseInt(beatsEl.textContent ?? "4") : 4;
+    const timeDen = beatTypeEl ? parseInt(beatTypeEl.textContent ?? "4") : 4;
+
+    const events: unknown[] = [
+      [0, "meter", timeNum, timeDen],
+      [0, "rate", bpm / 60, "step"],
+    ];
+
+    // Parse notes from all measures
+    const noteNameToSemitone: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    let currentBeat = 0;
+    let currentTick = 0;
+
+    const measures = doc.querySelectorAll("measure");
+    measures.forEach((measure) => {
+      const noteEls = measure.querySelectorAll("note");
+      noteEls.forEach((noteEl) => {
+        const isRest = noteEl.querySelector("rest") !== null;
+        const isChord = noteEl.querySelector("chord") !== null;
+        const durationEl = noteEl.querySelector("duration");
+        const durTicks = durationEl ? parseInt(durationEl.textContent ?? "0") : 0;
+        const durBeats = durTicks / divisions;
+
+        if (isChord) {
+          // chord note: same start time as previous note
+          currentTick -= durTicks; // rewind
+        }
+
+        if (!isRest) {
+          const stepEl = noteEl.querySelector("step");
+          const octaveEl = noteEl.querySelector("octave");
+          const alterEl = noteEl.querySelector("alter");
+          const step = stepEl?.textContent ?? "C";
+          const octave = octaveEl ? parseInt(octaveEl.textContent ?? "4") : 4;
+          const alter = alterEl ? parseInt(alterEl.textContent ?? "0") : 0;
+          const semitone = noteNameToSemitone[step] ?? 0;
+          const midi = (octave + 1) * 12 + semitone + alter;
+          const beatPos = currentTick / divisions;
+          const dynamic = 0.75;
+          events.push([parseFloat(beatPos.toFixed(3)), "note", midi, dynamic, parseFloat(durBeats.toFixed(3))]);
+        }
+
+        currentTick += durTicks;
+      });
+      currentBeat = currentTick / divisions;
+    });
+
+    events.sort((a, b) => (a as number[])[0] - (b as number[])[0]);
+
+    return JSON.stringify({ name: title, events }, null, 2);
+  } catch (e) {
+    throw new Error(`MusicXML parse failed: ${e}`);
+  }
+}
+
+function VisualizerTab({ preloadedJSON }: { preloadedJSON?: string | null }) {
+  const [jsonInput, setJsonInput] = useState(preloadedJSON ?? DEMO_JSON);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
+  const [xmlImportError, setXmlImportError] = useState("");
   const ctxRef = useRef<AudioContext | null>(null);
   const animRef = useRef<number | null>(null);
   const startTimeRef = useRef(0);
   const totalDurRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Update when preloadedJSON changes (e.g. navigated from Music Theory)
+  useEffect(() => {
+    if (preloadedJSON) setJsonInput(preloadedJSON);
+  }, [preloadedJSON]);
+
+  const handleMusicXmlImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const xml = ev.target?.result as string;
+        const json = musicXmlToSequenceJSON(xml);
+        setJsonInput(json);
+        setXmlImportError("");
+        toast.success(`Imported "${file.name}" as soundio/sequence JSON`);
+      } catch (err) {
+        setXmlImportError(String(err));
+        toast.error("MusicXML import failed");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
 
   const parsed = parseSequenceJSON(jsonInput);
   const seq = parsed.ok ? parsed.seq : null;
@@ -880,17 +1018,35 @@ function VisualizerTab() {
     <div className="space-y-5">
       {/* JSON input */}
       <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(26,39,68,0.15)" }}>
-        <div className="flex items-center justify-between px-4 py-2" style={{ background: "#1a2744" }}>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2" style={{ background: "#1a2744" }}>
           <span className="text-xs font-semibold" style={{ color: "#c8d3e0", fontFamily: "'IBM Plex Mono', monospace" }}>
             Paste soundio/sequence JSON
           </span>
-          <button
-            onClick={() => setJsonInput(DEMO_JSON)}
-            className="text-xs px-2 py-1 rounded"
-            style={{ background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
-          >
-            Load Demo
-          </button>
+          <div className="flex items-center gap-2 ml-auto">
+            {/* MusicXML import */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xml,.musicxml,.mxl"
+              className="hidden"
+              onChange={handleMusicXmlImport}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs px-3 py-1 rounded transition-all"
+              style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }}
+              title="Import a .musicxml or .xml file and convert to soundio/sequence JSON"
+            >
+              ↑ Import MusicXML
+            </button>
+            <button
+              onClick={() => setJsonInput(DEMO_JSON)}
+              className="text-xs px-2 py-1 rounded"
+              style={{ background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
+            >
+              Load Demo
+            </button>
+          </div>
         </div>
         <textarea
           value={jsonInput}
@@ -906,6 +1062,13 @@ function VisualizerTab() {
           spellCheck={false}
         />
       </div>
+
+      {/* XML import error */}
+      {xmlImportError && (
+        <div className="px-4 py-2 rounded text-xs" style={{ background: "rgba(74,222,128,0.08)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)", fontFamily: "'IBM Plex Mono', monospace" }}>
+          {xmlImportError}
+        </div>
+      )}
 
       {/* Parse error */}
       {!parsed.ok && (
@@ -1170,6 +1333,25 @@ const TABS = [
 
 export default function Sequencer() {
   const [activeTab, setActiveTab] = useState("composer");
+  const [preloadedJSON, setPreloadedJSON] = useState<string | null>(null);
+
+  // Read URL params: ?tab=visualizer&seq=<encoded JSON>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    const seq = params.get("seq");
+    if (tab && ["composer", "exporter", "visualizer"].includes(tab)) {
+      setActiveTab(tab);
+    }
+    if (seq) {
+      try {
+        const decoded = decodeURIComponent(seq);
+        setPreloadedJSON(decoded);
+      } catch {
+        // ignore malformed
+      }
+    }
+  }, []);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -1225,7 +1407,7 @@ export default function Sequencer() {
       {/* Tab content */}
       {activeTab === "composer" && <ComposerTab />}
       {activeTab === "exporter" && <ExporterTab />}
-      {activeTab === "visualizer" && <VisualizerTab />}
+      {activeTab === "visualizer" && <VisualizerTab preloadedJSON={preloadedJSON} />}
 
       {/* Spec reference footer */}
       <div

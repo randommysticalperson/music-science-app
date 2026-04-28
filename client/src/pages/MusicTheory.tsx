@@ -4,6 +4,7 @@
  * Uses Web Audio API for real-time sound synthesis
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
 
 // ─── Music Theory Data ────────────────────────────────────────────────────────
 
@@ -499,7 +500,109 @@ function Piano({
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Progressions Tab (with Send to Sequencer) ────────────────────────────────
+
+// Roman numeral → semitone offset (major key)
+const ROMAN_TO_SEMITONE: Record<string, number> = {
+  "I": 0, "II": 2, "III": 4, "IV": 5, "V": 7, "VI": 9, "VII": 11,
+  "i": 0, "ii": 2, "iii": 4, "iv": 5, "v": 7, "vi": 9, "vii": 11,
+};
+
+// HSID symbol for major/minor chords based on roman numeral case
+function romanToHsid(roman: string): string {
+  if (roman === "I" || roman === "IV" || roman === "V") return "∆";
+  if (roman === "ii" || roman === "iii" || roman === "vi") return "-";
+  if (roman === "V") return "7";
+  if (roman === "vii") return "ø";
+  return roman === roman.toUpperCase() ? "∆" : "-";
+}
+
+function ProgressionsTabInner({ rootNote }: { rootNote: number }) {
+  const [, setLocation] = useLocation();
+
+  const sendToSequencer = (progName: string, chords: string[]) => {
+    // Build a soundio/sequence JSON for the progression
+    const rootName = NOTE_NAMES[rootNote];
+    const bpm = 100;
+    const beatsPerChord = 4;
+    const events: unknown[] = [
+      [0, "meter", 4, 1],
+      [0, "rate", bpm / 60, "step"],
+    ];
+    let beat = 0;
+    chords.forEach((roman) => {
+      const semitone = ROMAN_TO_SEMITONE[roman] ?? 0;
+      const chordRootMidi = 60 + rootNote + semitone;
+      const hsid = romanToHsid(roman);
+      events.push([beat, "chord", rootName, hsid, beatsPerChord]);
+      // Add individual notes
+      const intervals = hsid === "∆" ? [0, 4, 7] : hsid === "-" ? [0, 3, 7] : hsid === "7" ? [0, 4, 7, 10] : [0, 3, 6];
+      intervals.forEach((iv) => {
+        events.push([beat, "note", chordRootMidi + iv, 0.75, beatsPerChord - 0.25]);
+      });
+      beat += beatsPerChord;
+    });
+    const seq = { name: `${rootName} ${progName}`, events };
+    const encoded = encodeURIComponent(JSON.stringify(seq, null, 2));
+    setLocation(`/sequencer?tab=visualizer&seq=${encoded}`);
+  };
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(PROGRESSIONS).map(([name, prog]) => (
+        <div key={name} className="module-card rounded p-5">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold mb-1" style={{ color: "#1a2744", fontFamily: "'DM Serif Display', serif" }}>
+                {name}
+              </h3>
+              <p className="text-sm leading-relaxed mb-3" style={{ color: "#4a5568" }}>
+                {prog.description}
+              </p>
+              <div className="flex flex-wrap gap-1 mb-3">
+                {prog.examples.map((ex) => (
+                  <span key={ex} className="text-xs px-2 py-0.5 rounded"
+                    style={{ background: "rgba(26,39,68,0.06)", color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}>
+                    {ex}
+                  </span>
+                ))}
+              </div>
+              {/* Send to Sequencer */}
+              <button
+                onClick={() => sendToSequencer(name, prog.chords)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all"
+                style={{
+                  background: "rgba(74,222,128,0.1)",
+                  color: "#4ade80",
+                  border: "1px solid rgba(74,222,128,0.3)",
+                  fontFamily: "'IBM Plex Mono', monospace",
+                }}
+                title={`Open ${NOTE_NAMES[rootNote]} ${name} in the Sequencer Visualizer`}
+              >
+                → Send to Sequencer
+              </button>
+            </div>
+            <div className="flex gap-2">
+              {prog.chords.map((chord, idx) => (
+                <div key={idx} className="w-12 h-12 rounded flex items-center justify-center text-sm font-bold"
+                  style={{
+                    background: idx === 0 || chord === "I" ? "#ff4f1f" : "rgba(255,79,31,0.1)",
+                    color: idx === 0 || chord === "I" ? "white" : "#ff4f1f",
+                    fontFamily: "'IBM Plex Mono', monospace",
+                  }}
+                >
+                  {chord}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────────────────
 
 type Tab = "scales" | "chords" | "intervals" | "progressions";
 
@@ -1472,55 +1575,7 @@ export default function MusicTheory() {
 
         {/* ── PROGRESSIONS TAB ── */}
         {activeTab === "progressions" && (
-          <div className="space-y-4">
-            {Object.entries(PROGRESSIONS).map(([name, prog]) => (
-              <div key={name} className="module-card rounded p-5">
-                <div className="flex flex-wrap items-start gap-4">
-                  <div className="flex-1 min-w-0">
-                    <h3
-                      className="text-lg font-bold mb-1"
-                      style={{ color: "#1a2744", fontFamily: "'DM Serif Display', serif" }}
-                    >
-                      {name}
-                    </h3>
-                    <p className="text-sm leading-relaxed mb-3" style={{ color: "#4a5568" }}>
-                      {prog.description}
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {prog.examples.map((ex) => (
-                        <span
-                          key={ex}
-                          className="text-xs px-2 py-0.5 rounded"
-                          style={{
-                            background: "rgba(26,39,68,0.06)",
-                            color: "#8a9bb0",
-                            fontFamily: "'IBM Plex Mono', monospace",
-                          }}
-                        >
-                          {ex}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {prog.chords.map((chord, idx) => (
-                      <div
-                        key={idx}
-                        className="w-12 h-12 rounded flex items-center justify-center text-sm font-bold"
-                        style={{
-                          background: idx === 0 || chord === "I" ? "#ff4f1f" : "rgba(255,79,31,0.1)",
-                          color: idx === 0 || chord === "I" ? "white" : "#ff4f1f",
-                          fontFamily: "'IBM Plex Mono', monospace",
-                        }}
-                      >
-                        {chord}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ProgressionsTabInner rootNote={rootNote} />
         )}
       </div>
     </div>
