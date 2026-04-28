@@ -4,7 +4,7 @@
  * Persistent left nav with module icons
  */
 import { Link, useLocation } from "wouter";
-import { Music, Activity, Waves, Home, Menu, X, Github } from "lucide-react";
+import { Music, Activity, Waves, Home, Menu, X, Github, ListMusic } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
@@ -12,6 +12,7 @@ const navItems = [
   { path: "/music-theory", label: "Music Theory", icon: Music, accent: "#ff4f1f" },
   { path: "/signal-processing", label: "Signal Processing", icon: Activity, accent: "#00d4ff" },
   { path: "/acoustics", label: "Acoustics", icon: Waves, accent: "#a78bfa" },
+  { path: "/sequencer", label: "Sequencer", icon: ListMusic, accent: "#4ade80" },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
