@@ -4,6 +4,7 @@
  * Based on: https://www.newton.com.tw/wiki/聲學
  */
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useLang } from "../contexts/LanguageContext";
 
 // ─── Acoustics constants ──────────────────────────────────────────────────────
 
@@ -223,12 +224,14 @@ export default function Acoustics() {
     name: ["Fundamental", "2nd Harmonic", "3rd Harmonic", "4th Harmonic", "5th Harmonic"][n - 1],
   }));
 
+  const { t } = useLang();
+
   const tabs: { id: AcTab; label: string }[] = [
-    { id: "waves", label: "Wave Types" },
-    { id: "doppler", label: "Doppler Effect" },
-    { id: "decibels", label: "Decibel Scale" },
-    { id: "resonance", label: "Resonance" },
-    { id: "history", label: "History" },
+    { id: "waves", label: t("acWaveTitle") },
+    { id: "doppler", label: t("acDopplerTitle") },
+    { id: "decibels", label: t("acDbTitle") },
+    { id: "resonance", label: t("acResonanceTitle") },
+    { id: "history", label: t("acHistoryTitle") },
   ];
 
   return (
@@ -250,10 +253,10 @@ export default function Acoustics() {
           className="text-3xl font-bold text-white"
           style={{ fontFamily: "'DM Serif Display', serif" }}
         >
-          Acoustics
+          {t("acTitle")}
         </h1>
         <p className="text-sm mt-1" style={{ color: "#8a9bb0" }}>
-          Theory of Sound · Mechanical Waves · Doppler Effect · Resonance · Decibel Scale
+          {t("acSubtitle")}
         </p>
       </div>
 

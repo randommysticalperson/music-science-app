@@ -4,6 +4,7 @@
  * Uses Web Audio API + Canvas for real-time visualization
  */
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useLang } from "../contexts/LanguageContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -422,11 +423,13 @@ export default function SignalProcessing() {
     };
   }, []);
 
+  const { t } = useLang();
+
   const tabs: { id: SPTab; label: string }[] = [
-    { id: "oscilloscope", label: "Oscilloscope" },
-    { id: "spectrum", label: "FFT Spectrum" },
-    { id: "filters", label: "Filters" },
-    { id: "theory", label: "Theory" },
+    { id: "oscilloscope", label: t("spOscTitle") },
+    { id: "spectrum", label: t("spFftTitle") },
+    { id: "filters", label: t("spFilterTitle") },
+    { id: "theory", label: t("spTheoryTitle") },
   ];
 
   const waveTypes: WaveType[] = ["sine", "square", "sawtooth", "triangle", "custom"];
@@ -450,10 +453,10 @@ export default function SignalProcessing() {
           className="text-3xl font-bold text-white"
           style={{ fontFamily: "'DM Serif Display', serif" }}
         >
-          Signal Processing
+          {t("spTitle")}
         </h1>
         <p className="text-sm mt-1" style={{ color: "#8a9bb0" }}>
-          Waveforms · Oscilloscope · FFT Spectrum Analysis · Filter Design
+          {t("spSubtitle")}
         </p>
       </div>
 
@@ -490,7 +493,7 @@ export default function SignalProcessing() {
                   className="text-xs font-medium mb-3 uppercase tracking-widest"
                   style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
                 >
-                  Waveform
+                  {t("spWaveform")}
                 </div>
                 <div className="space-y-1">
                   {waveTypes.map((wt) => (

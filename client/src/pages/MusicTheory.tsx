@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useLang } from "../contexts/LanguageContext";
 
 // ─── Music Theory Data ────────────────────────────────────────────────────────
 
@@ -344,6 +345,7 @@ function Piano({
   onNotePlay: (midiNote: number) => void;
   pressedKeys: Set<number>;
 }) {
+  const { t } = useLang();
   // 3 octaves: C4–B6 (covers all mapped keys)
   const startOctave = 4;
   const octaves = 3;
@@ -355,7 +357,7 @@ function Piano({
         className="flex items-center gap-4 mb-2 flex-wrap"
         style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#8a9bb0" }}
       >
-        <span>⌨ Keyboard: <span style={{ color: "#ff4f1f" }}>Z–M</span> = C4–B4 &nbsp;|&nbsp; <span style={{ color: "#00d4ff" }}>Q–U</span> = C5–B5 &nbsp;|&nbsp; <span style={{ color: "#a78bfa" }}>I–P</span> = C6–E6</span>
+        <span>⌨ {t("mtKeyboardHint")}</span>
         <span style={{ color: "rgba(138,155,176,0.5)" }}>Black keys: S D G H J (oct4) · 2 3 5 6 7 (oct5)</span>
       </div>
 
@@ -519,6 +521,7 @@ function romanToHsid(roman: string): string {
 
 function ProgressionsTabInner({ rootNote }: { rootNote: number }) {
   const [, setLocation] = useLocation();
+  const { t } = useLang();
 
   const sendToSequencer = (progName: string, chords: string[]) => {
     // Build a soundio/sequence JSON for the progression
@@ -579,7 +582,7 @@ function ProgressionsTabInner({ rootNote }: { rootNote: number }) {
                 }}
                 title={`Open ${NOTE_NAMES[rootNote]} ${name} in the Sequencer Visualizer`}
               >
-                → Send to Sequencer
+                {t("mtSendToSeq")}
               </button>
             </div>
             <div className="flex gap-2">
@@ -862,11 +865,13 @@ export default function MusicTheory() {
     playNote(ctx, noteToFrequency(midiNote), 1.0, analyserRef.current ?? undefined, sustainRef);
   };
 
+  const { t } = useLang();
+
   const tabs: { id: Tab; label: string }[] = [
-    { id: "scales", label: "Scales" },
-    { id: "chords", label: "Chords" },
-    { id: "intervals", label: "Intervals" },
-    { id: "progressions", label: "Progressions" },
+    { id: "scales", label: t("mtTabScales") },
+    { id: "chords", label: t("mtTabChords") },
+    { id: "intervals", label: t("mtTabIntervals") },
+    { id: "progressions", label: t("mtTabProgressions") },
   ];
 
   const consonanceColor = (c: string) => {
@@ -898,10 +903,10 @@ export default function MusicTheory() {
           className="text-3xl font-bold text-white"
           style={{ fontFamily: "'DM Serif Display', serif" }}
         >
-          Music Theory
+          {t("mtTitle")}
         </h1>
         <p className="text-sm mt-1" style={{ color: "#8a9bb0" }}>
-          Scales · Chords · Intervals · Chord Progressions
+          {t("mtSubtitle")}
         </p>
       </div>
 
@@ -912,7 +917,7 @@ export default function MusicTheory() {
             className="text-xs font-medium uppercase tracking-widest"
             style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
           >
-            Root Note:
+            {t("mtRootNote")}:
           </span>
           <div className="flex flex-wrap gap-1.5">
             {NOTE_NAMES.map((note, i) => (
@@ -964,7 +969,7 @@ export default function MusicTheory() {
                     boxShadow: sustainActive ? "0 0 6px #00d4ff" : "none",
                   }}
                 />
-                SUSTAIN {sustainActive ? "ON" : "OFF"} — SPACE
+                {t("mtSustain")} {sustainActive ? "ON" : "OFF"} — SPACE
               </div>
             </div>
           </div>
@@ -986,7 +991,7 @@ export default function MusicTheory() {
               className="text-xs font-medium uppercase tracking-widest"
               style={{ color: "#00d4ff", fontFamily: "'IBM Plex Mono', monospace" }}
             >
-              FFT Spectrum Analyzer
+              {t("mtFftTitle")}
               <span style={{ color: "rgba(0,212,255,0.5)", marginLeft: 8 }}>
                 — static: scale/chord frequencies · live: updates during playback
               </span>
@@ -1001,7 +1006,7 @@ export default function MusicTheory() {
                 fontFamily: "'IBM Plex Mono', monospace",
               }}
             >
-              {showFFT ? "Hide" : "Show"}
+              {showFFT ? t("mtFftHideToggle") : t("mtFftToggle")}
             </button>
           </div>
           {showFFT && (
@@ -1017,12 +1022,12 @@ export default function MusicTheory() {
                   className="text-xs font-medium uppercase tracking-widest mb-2"
                   style={{ color: "rgba(0,212,255,0.6)", fontFamily: "'IBM Plex Mono', monospace" }}
                 >
-                  Frequency Reference
+                  {t("mtRefTable")}
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid rgba(0,212,255,0.15)" }}>
-                      {["#", "Note", "Interval", "Abbr", "MIDI", "Freq (Hz)", "Wavelength (cm)", "Ratio", "Consonance"].map((h) => (
+                      {["#", t("mtRefNote"), t("mtRefInterval"), t("mtRefAbbr"), t("mtRefMidi"), t("mtRefFreq"), t("mtRefWave"), t("mtRefRatio"), t("mtRefConsonance")].map((h) => (
                         <th
                           key={h}
                           style={{
@@ -1221,7 +1226,7 @@ export default function MusicTheory() {
                       fontFamily: "'DM Sans', sans-serif",
                     }}
                   >
-                    ▶ Play Scale
+                    ▶ {t("mtPlayScale")}
                   </button>
                 </div>
                 <p className="text-sm leading-relaxed" style={{ color: "#4a5568" }}>
@@ -1337,7 +1342,7 @@ export default function MusicTheory() {
                     className="px-4 py-2 rounded text-sm font-medium transition-all hover:opacity-90"
                     style={{ background: "#ff4f1f", color: "white", fontFamily: "'DM Sans', sans-serif" }}
                   >
-                    ▶ Play Chord
+                    ▶ {t("mtPlayChord")}
                   </button>
                 </div>
                 <p className="text-sm leading-relaxed" style={{ color: "#4a5568" }}>
@@ -1415,7 +1420,7 @@ export default function MusicTheory() {
                     className="px-4 py-2 rounded text-sm font-medium transition-all hover:opacity-90"
                     style={{ background: "#ff4f1f", color: "white", fontFamily: "'DM Sans', sans-serif" }}
                   >
-                    ▶ Play
+                    ▶ {t("mtPlayInterval")}
                   </button>
                 </div>
                 <div className="flex gap-3 mb-4">

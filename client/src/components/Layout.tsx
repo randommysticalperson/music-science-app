@@ -1,23 +1,25 @@
 /*
  * Layout.tsx — Bauhaus Frequency Design
  * Dark navy sidebar + chalk main area
- * Persistent left nav with module icons
+ * Persistent left nav with module icons + EN/繁體中文 language toggle
  */
 import { Link, useLocation } from "wouter";
-import { Music, Activity, Waves, Home, Menu, X, Github, ListMusic } from "lucide-react";
+import { Music, Activity, Waves, Home, Menu, X, Github, ListMusic, Languages } from "lucide-react";
 import { useState } from "react";
-
-const navItems = [
-  { path: "/", label: "Overview", icon: Home, accent: "#8a9bb0" },
-  { path: "/music-theory", label: "Music Theory", icon: Music, accent: "#ff4f1f" },
-  { path: "/signal-processing", label: "Signal Processing", icon: Activity, accent: "#00d4ff" },
-  { path: "/acoustics", label: "Acoustics", icon: Waves, accent: "#a78bfa" },
-  { path: "/sequencer", label: "Sequencer", icon: ListMusic, accent: "#4ade80" },
-];
+import { useLang } from "../contexts/LanguageContext";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { t, toggleLang } = useLang();
+
+  const navItems = [
+    { path: "/", label: t("overview"), icon: Home, accent: "#8a9bb0" },
+    { path: "/music-theory", label: t("musicTheory"), icon: Music, accent: "#ff4f1f" },
+    { path: "/signal-processing", label: t("signalProcessing"), icon: Activity, accent: "#00d4ff" },
+    { path: "/acoustics", label: t("acoustics"), icon: Waves, accent: "#a78bfa" },
+    { path: "/sequencer", label: t("sequencer"), icon: ListMusic, accent: "#4ade80" },
+  ];
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#f7f5f0" }}>
@@ -48,10 +50,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <div className="text-white font-semibold text-sm tracking-wide" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-              SoundLab
+              {t("appName")}
             </div>
             <div className="text-xs" style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}>
-              v1.0
+              {t("appVersion")}
             </div>
           </div>
           <button
@@ -62,13 +64,37 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
+        {/* Language toggle */}
+        <div className="px-4 pt-4 pb-1">
+          <button
+            onClick={toggleLang}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs font-semibold transition-all"
+            style={{
+              background: "rgba(0,212,255,0.1)",
+              border: "1px solid rgba(0,212,255,0.25)",
+              color: "#00d4ff",
+              fontFamily: "'IBM Plex Mono', monospace",
+              letterSpacing: "0.02em",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,212,255,0.18)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,212,255,0.1)";
+            }}
+          >
+            <Languages size={13} />
+            <span>{t("langToggle")}</span>
+          </button>
+        </div>
+
         {/* Module label */}
-        <div className="px-6 pt-5 pb-2">
+        <div className="px-6 pt-4 pb-2">
           <span
             className="text-xs font-semibold uppercase tracking-widest"
             style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
           >
-            Modules
+            {t("modules")}
           </span>
         </div>
 
@@ -138,7 +164,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             }}
           >
             <Github size={13} />
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>View Source on GitHub</span>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>{t("viewSource")}</span>
           </a>
 
           {/* Reference standards */}
@@ -150,7 +176,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="mt-2" style={{ color: "rgba(138,155,176,0.35)" }}>
-            © 2026 SoundLab
+            © 2026 {t("appName")}
           </div>
         </div>
       </aside>
@@ -166,8 +192,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Menu size={20} color="white" />
           </button>
           <span className="text-white font-semibold text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            SoundLab
+            {t("appName")}
           </span>
+          {/* Mobile lang toggle */}
+          <button
+            onClick={toggleLang}
+            className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded text-xs"
+            style={{
+              background: "rgba(0,212,255,0.15)",
+              border: "1px solid rgba(0,212,255,0.3)",
+              color: "#00d4ff",
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            <Languages size={11} />
+            {t("langToggle")}
+          </button>
         </div>
 
         {/* Page content */}

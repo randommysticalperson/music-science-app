@@ -11,6 +11,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Play, Square, Download, Copy, Check, RefreshCw, Music2, FileJson, BarChart2 } from "lucide-react";
 import { toast } from "sonner";
+import { useLang } from "../contexts/LanguageContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1325,15 +1326,18 @@ function VisualizerTab({ preloadedJSON }: { preloadedJSON?: string | null }) {
 
 // ─── Main Sequencer Page ───────────────────────────────────────────────────────
 
-const TABS = [
-  { id: "composer", label: "Composer", icon: Music2, desc: "Piano roll → sequence JSON" },
-  { id: "exporter", label: "Progression Exporter", icon: FileJson, desc: "Chord progression → sequence JSON" },
-  { id: "visualizer", label: "Visualizer", icon: BarChart2, desc: "Paste JSON → piano roll" },
-];
+// TABS are built dynamically inside the component using translations
 
 export default function Sequencer() {
+  const { t } = useLang();
   const [activeTab, setActiveTab] = useState("composer");
   const [preloadedJSON, setPreloadedJSON] = useState<string | null>(null);
+
+  const TABS = [
+    { id: "composer", label: t("seqComposer"), icon: Music2, desc: t("seqComposerDesc") },
+    { id: "exporter", label: t("seqExporter"), icon: FileJson, desc: t("seqExporterDesc") },
+    { id: "visualizer", label: t("seqVisualizer"), icon: BarChart2, desc: t("seqVisualizerDesc") },
+  ];
 
   // Read URL params: ?tab=visualizer&seq=<encoded JSON>
   useEffect(() => {
@@ -1369,14 +1373,14 @@ export default function Sequencer() {
           className="text-3xl font-bold mb-1"
           style={{ fontFamily: "'DM Serif Display', serif", color: "#1a2744" }}
         >
-          Sequencer
+          {t("seqTitle")}
         </h1>
         <p className="text-sm" style={{ color: "#4a5a7a", fontFamily: "'DM Sans', sans-serif" }}>
-          Create, export, and visualize music sequences in the{" "}
+          {t("seqSubtitle")}{" "}
           <a href="https://github.com/soundio/sequence" target="_blank" rel="noopener noreferrer" style={{ color: "#4ade80" }}>
             soundio/sequence JSON format
           </a>
-          {" "}— a minimal, interoperable structure for timed musical events aligned with the Web Audio API, MIDI 1.0, and OSC.
+          {" "}— {t("seqSubtitleSuffix")}
         </p>
       </div>
 
