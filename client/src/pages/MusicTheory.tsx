@@ -93,6 +93,57 @@ const PROGRESSIONS: Record<string, { chords: string[]; description: string; exam
   },
 };
 
+// ─── Translation key maps for data labels ────────────────────────────────────
+
+const SCALE_KEY_MAP: Record<string, import("../contexts/LanguageContext").TranslationKey> = {
+  "Major": "scaleMajor",
+  "Natural Minor": "scaleNaturalMinor",
+  "Harmonic Minor": "scaleHarmonicMinor",
+  "Melodic Minor": "scaleMelodicMinor",
+  "Pentatonic Major": "scalePentatonicMajor",
+  "Pentatonic Minor": "scalePentatonicMinor",
+  "Blues": "scaleBlues",
+  "Dorian": "scaleDorian",
+  "Phrygian": "scalePhrygian",
+  "Lydian": "scaleLydian",
+  "Mixolydian": "scaleMixolydian",
+  "Locrian": "scaleLocrian",
+  "Whole Tone": "scaleWholeTone",
+  "Diminished": "scaleDiminished",
+};
+
+const CHORD_KEY_MAP: Record<string, import("../contexts/LanguageContext").TranslationKey> = {
+  "Major": "chordMajor",
+  "Minor": "chordMinor",
+  "Dominant 7th": "chordDom7",
+  "Major 7th": "chordMaj7",
+  "Minor 7th": "chordMin7",
+  "Diminished": "chordDim",
+  "Augmented": "chordAug",
+  "Suspended 2nd": "chordSus2",
+  "Suspended 4th": "chordSus4",
+  "Add 9": "chordAdd9",
+  "Minor 9th": "chordMin7",
+  "Diminished 7th": "chordDim7",
+  "Half-Diminished": "chordHalfDim7",
+};
+
+const INTERVAL_KEY_MAP: Record<number, import("../contexts/LanguageContext").TranslationKey> = {
+  0: "intervalUnison",
+  1: "intervalMinor2",
+  2: "intervalMajor2",
+  3: "intervalMinor3",
+  4: "intervalMajor3",
+  5: "intervalPerfect4",
+  6: "intervalTritone",
+  7: "intervalPerfect5",
+  8: "intervalMinor6",
+  9: "intervalMajor6",
+  10: "intervalMinor7",
+  11: "intervalMajor7",
+  12: "intervalOctave",
+};
+
 // ─── Audio Engine ─────────────────────────────────────────────────────────────
 
 function noteToFrequency(midiNote: number): number {
@@ -1192,7 +1243,7 @@ export default function MusicTheory() {
                       fontFamily: "'DM Sans', sans-serif",
                     }}
                   >
-                    {name}
+                    {SCALE_KEY_MAP[name] ? t(SCALE_KEY_MAP[name]) : name}
                   </button>
                 ))}
               </div>
@@ -1207,7 +1258,7 @@ export default function MusicTheory() {
                       className="text-xl font-bold"
                       style={{ color: "#1a2744", fontFamily: "'DM Serif Display', serif" }}
                     >
-                      {NOTE_NAMES[rootNote]} {selectedScale}
+                      {NOTE_NAMES[rootNote]} {SCALE_KEY_MAP[selectedScale] ? t(SCALE_KEY_MAP[selectedScale]) : selectedScale}
                     </h2>
                     <div
                       className="text-xs mt-1"
@@ -1300,7 +1351,7 @@ export default function MusicTheory() {
                       fontFamily: "'DM Sans', sans-serif",
                     }}
                   >
-                    <span>{name}</span>
+                    <span>{CHORD_KEY_MAP[name] ? t(CHORD_KEY_MAP[name]) : name}</span>
                     <span
                       className="text-xs"
                       style={{
@@ -1325,7 +1376,7 @@ export default function MusicTheory() {
                     >
                       {NOTE_NAMES[rootNote]}{CHORD_TYPES[selectedChord].symbol}
                       <span className="text-base ml-2 font-normal" style={{ color: "#8a9bb0" }}>
-                        ({selectedChord})
+                        ({CHORD_KEY_MAP[selectedChord] ? t(CHORD_KEY_MAP[selectedChord]) : selectedChord})
                       </span>
                     </h2>
                     <div
@@ -1406,7 +1457,7 @@ export default function MusicTheory() {
                       className="text-xl font-bold"
                       style={{ color: "#1a2744", fontFamily: "'DM Serif Display', serif" }}
                     >
-                      {INTERVALS[selectedInterval].name}
+                      {INTERVAL_KEY_MAP[selectedInterval] ? t(INTERVAL_KEY_MAP[selectedInterval]) : INTERVALS[selectedInterval].name}
                     </h2>
                     <div
                       className="text-xs mt-1"
@@ -1537,7 +1588,7 @@ export default function MusicTheory() {
                           {interval.semitones}
                         </td>
                         <td className="px-4 py-2.5 font-medium" style={{ color: "#1a2744" }}>
-                          {interval.name}
+                          {INTERVAL_KEY_MAP[interval.semitones] ? t(INTERVAL_KEY_MAP[interval.semitones]) : interval.name}
                         </td>
                         <td
                           className="px-4 py-2.5"

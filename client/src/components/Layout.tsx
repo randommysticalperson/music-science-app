@@ -11,7 +11,7 @@ import { useLang } from "../contexts/LanguageContext";
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { t, toggleLang } = useLang();
+  const { t, toggleLang, lang } = useLang();
 
   const navItems = [
     { path: "/", label: t("overview"), icon: Home, accent: "#8a9bb0" },
@@ -64,11 +64,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Language toggle */}
+        {/* Language toggle — cycles EN → 繁中 → 日本語 → EN */}
         <div className="px-4 pt-4 pb-1">
           <button
             onClick={toggleLang}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs font-semibold transition-all"
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded text-xs font-semibold transition-all"
             style={{
               background: "rgba(0,212,255,0.1)",
               border: "1px solid rgba(0,212,255,0.25)",
@@ -82,8 +82,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,212,255,0.1)";
             }}
+            title="Switch language"
           >
-            <Languages size={13} />
+            <div className="flex items-center gap-2">
+              <Languages size={13} />
+              <span style={{ opacity: 0.6 }}>
+                {lang === "en" ? "EN" : lang === "zh" ? "繁中" : "日本語"}
+              </span>
+              <span style={{ opacity: 0.4 }}>→</span>
+            </div>
             <span>{t("langToggle")}</span>
           </button>
         </div>
@@ -206,6 +213,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             }}
           >
             <Languages size={11} />
+            <span style={{ opacity: 0.6 }}>{lang === "en" ? "EN" : lang === "zh" ? "繁中" : "日本語"}</span>
+            <span style={{ opacity: 0.4 }}>→</span>
             {t("langToggle")}
           </button>
         </div>

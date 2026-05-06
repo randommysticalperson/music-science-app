@@ -1,10 +1,10 @@
 /**
  * LanguageContext.tsx — Bauhaus Frequency Design
- * Provides EN / 繁體中文 language toggle for the entire SoundLab app.
+ * Provides EN / 繁體中文 / 日本語 three-way language toggle for the entire SoundLab app.
  */
 import React, { createContext, useContext, useState, ReactNode } from "react";
 
-export type Lang = "en" | "zh";
+export type Lang = "en" | "zh" | "ja";
 
 // ─── Translation Strings ──────────────────────────────────────────────────────
 
@@ -21,6 +21,7 @@ export const translations = {
     sequencer: "Sequencer",
     viewSource: "View Source on GitHub",
     langToggle: "繁體中文",
+    langNext: "日本語",
 
     // Home page
     homeTag: "Interactive Science Platform",
@@ -75,6 +76,52 @@ export const translations = {
     mtPlayInterval: "Play Interval",
     mtSendToSeq: "→ Send to Sequencer",
     mtKeyboardHint: "Keyboard: Z–M (Oct 4) · Q–U (Oct 5) · I–P (Oct 6)",
+
+    // Scale names
+    scaleMajor: "Major",
+    scaleNaturalMinor: "Natural Minor",
+    scaleHarmonicMinor: "Harmonic Minor",
+    scaleMelodicMinor: "Melodic Minor",
+    scalePentatonicMajor: "Pentatonic Major",
+    scalePentatonicMinor: "Pentatonic Minor",
+    scaleBlues: "Blues",
+    scaleDorian: "Dorian",
+    scalePhrygian: "Phrygian",
+    scaleLydian: "Lydian",
+    scaleMixolydian: "Mixolydian",
+    scaleLocrian: "Locrian",
+    scaleWholeTone: "Whole Tone",
+    scaleDiminished: "Diminished",
+
+    // Chord names
+    chordMajor: "Major",
+    chordMinor: "Minor",
+    chordDim: "Diminished",
+    chordAug: "Augmented",
+    chordSus2: "Suspended 2nd",
+    chordSus4: "Suspended 4th",
+    chordMaj7: "Major 7th",
+    chordMin7: "Minor 7th",
+    chordDom7: "Dominant 7th",
+    chordDim7: "Diminished 7th",
+    chordHalfDim7: "Half-Diminished 7th",
+    chordAugMaj7: "Augmented Major 7th",
+    chordAdd9: "Add 9",
+
+    // Interval names
+    intervalUnison: "Unison",
+    intervalMinor2: "Minor 2nd",
+    intervalMajor2: "Major 2nd",
+    intervalMinor3: "Minor 3rd",
+    intervalMajor3: "Major 3rd",
+    intervalPerfect4: "Perfect 4th",
+    intervalTritone: "Tritone",
+    intervalPerfect5: "Perfect 5th",
+    intervalMinor6: "Minor 6th",
+    intervalMajor6: "Major 6th",
+    intervalMinor7: "Minor 7th",
+    intervalMajor7: "Major 7th",
+    intervalOctave: "Octave",
 
     // Signal Processing page
     spTitle: "Signal Processing",
@@ -167,7 +214,8 @@ export const translations = {
     acoustics: "聲學",
     sequencer: "音序器",
     viewSource: "在 GitHub 上查看原始碼",
-    langToggle: "English",
+    langToggle: "日本語",
+    langNext: "English",
 
     // Home page
     homeTag: "互動科學平台",
@@ -222,6 +270,52 @@ export const translations = {
     mtPlayInterval: "播放音程",
     mtSendToSeq: "→ 傳送至音序器",
     mtKeyboardHint: "鍵盤：Z–M（第4八度）· Q–U（第5八度）· I–P（第6八度）",
+
+    // Scale names
+    scaleMajor: "大調音階",
+    scaleNaturalMinor: "自然小調",
+    scaleHarmonicMinor: "和聲小調",
+    scaleMelodicMinor: "旋律小調",
+    scalePentatonicMajor: "大調五聲音階",
+    scalePentatonicMinor: "小調五聲音階",
+    scaleBlues: "藍調音階",
+    scaleDorian: "多利安調式",
+    scalePhrygian: "弗里幾亞調式",
+    scaleLydian: "利底亞調式",
+    scaleMixolydian: "混合利底亞調式",
+    scaleLocrian: "洛克利安調式",
+    scaleWholeTone: "全音音階",
+    scaleDiminished: "減音階",
+
+    // Chord names
+    chordMajor: "大三和弦",
+    chordMinor: "小三和弦",
+    chordDim: "減三和弦",
+    chordAug: "增三和弦",
+    chordSus2: "掛二和弦",
+    chordSus4: "掛四和弦",
+    chordMaj7: "大七和弦",
+    chordMin7: "小七和弦",
+    chordDom7: "屬七和弦",
+    chordDim7: "減七和弦",
+    chordHalfDim7: "半減七和弦",
+    chordAugMaj7: "增大七和弦",
+    chordAdd9: "加九和弦",
+
+    // Interval names
+    intervalUnison: "同度",
+    intervalMinor2: "小二度",
+    intervalMajor2: "大二度",
+    intervalMinor3: "小三度",
+    intervalMajor3: "大三度",
+    intervalPerfect4: "純四度",
+    intervalTritone: "三全音",
+    intervalPerfect5: "純五度",
+    intervalMinor6: "小六度",
+    intervalMajor6: "大六度",
+    intervalMinor7: "小七度",
+    intervalMajor7: "大七度",
+    intervalOctave: "八度",
 
     // Signal Processing page
     spTitle: "訊號處理",
@@ -302,6 +396,200 @@ export const translations = {
     seqVisualizerDesc: "貼上 JSON → 鋼琴捲軸",
     seqSubtitleSuffix: "一種與 Web Audio API、MIDI 1.0 及 OSC 對齊的最小化、可互通音樂事件結構。",
   },
+
+  ja: {
+    // App / Sidebar
+    appName: "サウンドラボ",
+    appVersion: "v1.0",
+    modules: "モジュール",
+    overview: "概要",
+    musicTheory: "音楽理論",
+    signalProcessing: "信号処理",
+    acoustics: "音響学",
+    sequencer: "シーケンサー",
+    viewSource: "GitHubでソースを見る",
+    langToggle: "English",
+    langNext: "繁體中文",
+
+    // Home page
+    homeTag: "インタラクティブ科学プラットフォーム",
+    homeTitle: "音の科学",
+    homeSubtitle: "和声の数学から振動の力学まで、音楽理論・デジタル信号処理・音響物理学をインタラクティブに探求します。",
+    homeStart: "探索を始める",
+    homePillarsTitle: "音の科学の三本柱",
+    homePillar1Title: "音楽理論",
+    homePillar1Desc: "音階、和音、音程、進行を探求。インタラクティブなピアノを演奏し、FFTスペクトル分析で和声を可視化します。",
+    homePillar2Title: "信号処理",
+    homePillar2Desc: "波形を可視化し、FFTで周波数スペクトルを分析。デジタルフィルターがリアルタイムで音をどう変えるかを探ります。",
+    homePillar3Title: "音響学",
+    homePillar3Desc: "音を機械波として理解する——周波数、波長、ドップラー効果、共鳴、デシベルスケール。",
+    homeSequencerTitle: "シーケンサー",
+    homeSequencerDesc: "ステップシーケンスを作曲し、コード進行を soundio/sequence JSON としてエクスポート。ピアノロールで任意のシーケンスを可視化。",
+    homeFactsTitle: "重要な数値",
+    homeFact1: "A4 = 440 Hz",
+    homeFact1Sub: "ISO 16 調律標準",
+    homeFact2: "12平均律",
+    homeFact2Sub: "等分平均律",
+    homeFact3: "343 m/s",
+    homeFact3Sub: "20°Cでの音速",
+    homeFact4: "20 Hz – 20 kHz",
+    homeFact4Sub: "人間の可聴域",
+
+    // Music Theory page
+    mtTitle: "音楽理論",
+    mtSubtitle: "インタラクティブピアノ · 音階 · 和音 · 音程 · コード進行",
+    mtRootNote: "ルート音",
+    mtSustain: "サスティン",
+    mtSustainHint: "スペースキーを押し続けてサスティン",
+    mtFftTitle: "周波数スペクトル",
+    mtFftToggle: "FFTを表示",
+    mtFftHideToggle: "FFTを非表示",
+    mtFftLive: "ライブ",
+    mtFftStatic: "静的",
+    mtRefTable: "周波数参照表",
+    mtRefNote: "音符",
+    mtRefInterval: "音程",
+    mtRefAbbr: "略号",
+    mtRefMidi: "MIDI",
+    mtRefFreq: "周波数 (Hz)",
+    mtRefWave: "波長 (cm)",
+    mtRefRatio: "比率",
+    mtRefConsonance: "協和度",
+    mtTabScales: "音階",
+    mtTabChords: "和音",
+    mtTabIntervals: "音程",
+    mtTabProgressions: "コード進行",
+    mtPlayScale: "音階を演奏",
+    mtPlayChord: "和音を演奏",
+    mtPlayInterval: "音程を演奏",
+    mtSendToSeq: "→ シーケンサーへ送る",
+    mtKeyboardHint: "キーボード: Z–M (4オクターブ) · Q–U (5オクターブ) · I–P (6オクターブ)",
+
+    // Scale names
+    scaleMajor: "長音階",
+    scaleNaturalMinor: "自然短音階",
+    scaleHarmonicMinor: "和声短音階",
+    scaleMelodicMinor: "旋律短音階",
+    scalePentatonicMajor: "長調ペンタトニック",
+    scalePentatonicMinor: "短調ペンタトニック",
+    scaleBlues: "ブルース音階",
+    scaleDorian: "ドリア旋法",
+    scalePhrygian: "フリギア旋法",
+    scaleLydian: "リディア旋法",
+    scaleMixolydian: "ミクソリディア旋法",
+    scaleLocrian: "ロクリア旋法",
+    scaleWholeTone: "全音音階",
+    scaleDiminished: "ディミニッシュ音階",
+
+    // Chord names
+    chordMajor: "長三和音",
+    chordMinor: "短三和音",
+    chordDim: "減三和音",
+    chordAug: "増三和音",
+    chordSus2: "サスペンデッド2nd",
+    chordSus4: "サスペンデッド4th",
+    chordMaj7: "長七和音",
+    chordMin7: "短七和音",
+    chordDom7: "属七和音",
+    chordDim7: "減七和音",
+    chordHalfDim7: "半減七和音",
+    chordAugMaj7: "増長七和音",
+    chordAdd9: "アドナインス",
+
+    // Interval names
+    intervalUnison: "同度",
+    intervalMinor2: "短2度",
+    intervalMajor2: "長2度",
+    intervalMinor3: "短3度",
+    intervalMajor3: "長3度",
+    intervalPerfect4: "完全4度",
+    intervalTritone: "三全音",
+    intervalPerfect5: "完全5度",
+    intervalMinor6: "短6度",
+    intervalMajor6: "長6度",
+    intervalMinor7: "短7度",
+    intervalMajor7: "長7度",
+    intervalOctave: "オクターブ",
+
+    // Signal Processing page
+    spTitle: "信号処理",
+    spSubtitle: "波形オシロスコープ · FFTスペクトル · フィルター探索",
+    spOscTitle: "オシロスコープ",
+    spFftTitle: "FFTスペクトルアナライザー",
+    spFilterTitle: "フィルター探索",
+    spFrequency: "周波数",
+    spAmplitude: "振幅",
+    spWaveform: "波形",
+    spSine: "正弦波",
+    spSquare: "矩形波",
+    spSawtooth: "のこぎり波",
+    spTriangle: "三角波",
+    spAdditive: "加算合成",
+    spFilterType: "フィルタータイプ",
+    spLowpass: "ローパス",
+    spHighpass: "ハイパス",
+    spBandpass: "バンドパス",
+    spNotch: "ノッチ",
+    spCutoff: "カットオフ",
+    spResonance: "レゾナンス",
+    spTheoryTitle: "信号理論参照",
+
+    // Acoustics page
+    acTitle: "音響学",
+    acSubtitle: "機械波 · ドップラー効果 · 共鳴 · デシベルスケール",
+    acWaveTitle: "波動シミュレーション",
+    acLongitudinal: "縦波",
+    acTransverse: "横波",
+    acFrequency: "周波数 (Hz)",
+    acAmplitude: "振幅",
+    acDopplerTitle: "ドップラー効果計算機",
+    acSourceSpeed: "音源速度 (m/s)",
+    acObserverSpeed: "観測者速度 (m/s)",
+    acSourceFreq: "音源周波数 (Hz)",
+    acApproaching: "接近",
+    acReceding: "遠ざかる",
+    acObservedFreq: "観測周波数",
+    acResonanceTitle: "弦の共鳴",
+    acStringLength: "弦の長さ (m)",
+    acTension: "張力 (N)",
+    acLinearDensity: "線密度 (kg/m)",
+    acFundamental: "基本振動",
+    acHarmonics: "倍音",
+    acDbTitle: "デシベルスケール参照",
+    acSpeedTitle: "各媒質中の音速",
+    acHistoryTitle: "音響学の歴史",
+
+    // Sequencer page
+    seqTitle: "シーケンサー",
+    seqSubtitle: "soundio/sequence フォーマット · 作曲 · エクスポート · 可視化",
+    seqTabComposer: "作曲器",
+    seqTabExporter: "進行エクスポーター",
+    seqTabVisualizer: "ビジュアライザー",
+    seqPlay: "再生",
+    seqStop: "停止",
+    seqClear: "クリア",
+    seqRandomize: "ランダム",
+    seqBpm: "BPM",
+    seqWaveform: "波形",
+    seqExportJson: "JSONエクスポート",
+    seqDownload: "ダウンロード",
+    seqLoadDemo: "デモを読み込む",
+    seqImportXml: "↑ MusicXMLをインポート",
+    seqPasteHint: "soundio/sequence JSONを貼り付け",
+    seqPianoRoll: "ピアノロール",
+    seqEventTable: "イベント表",
+    seqBeat: "拍",
+    seqType: "タイプ",
+    seqParams: "パラメーター",
+    seqSpecRef: "仕様参照",
+    seqComposer: "作曲器",
+    seqExporter: "進行エクスポーター",
+    seqVisualizer: "ビジュアライザー",
+    seqComposerDesc: "ピアノロール → シーケンス JSON",
+    seqExporterDesc: "コード進行 → シーケンス JSON",
+    seqVisualizerDesc: "JSON貼り付け → ピアノロール",
+    seqSubtitleSuffix: "Web Audio API、MIDI 1.0、OSCに対応した最小限の相互運用可能な音楽イベント構造。",
+  },
 } as const;
 
 export type TranslationKey = keyof typeof translations.en;
@@ -329,9 +617,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   });
 
+  // Cycle: en → zh → ja → en
   const toggleLang = () => {
     setLang((prev) => {
-      const next: Lang = prev === "en" ? "zh" : "en";
+      const cycle: Lang[] = ["en", "zh", "ja"];
+      const next = cycle[(cycle.indexOf(prev) + 1) % cycle.length];
       try { localStorage.setItem("soundlab-lang", next); } catch {}
       return next;
     });
