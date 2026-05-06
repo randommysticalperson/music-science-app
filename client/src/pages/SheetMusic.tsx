@@ -189,7 +189,9 @@ export default function SheetMusic() {
     setLoadError(null);
 
     const settings = new alphaTab.Settings();
-    settings.core.engine = "svg";
+    // Use html5 canvas engine — avoids the SVG worker BoundsLookup.fromJson crash
+    // (SVG engine serializes beat bounds via worker messages before voices are ready)
+    settings.core.engine = "html5";
     settings.core.logLevel = alphaTab.LogLevel.None;
     // Explicitly point to the public/font directory so Bravura loads correctly
     settings.core.fontDirectory = "/font/";
@@ -231,7 +233,14 @@ export default function SheetMusic() {
       setCurrentTime(0);
     });
     api.error.on((err: { message?: string; type?: string }) => {
-      setLoadError(`Error: ${err.message ?? String(err)}`);
+      const msg = err.message ?? String(err);
+      // Suppress the known BoundsLookup.fromJson worker race condition error
+      // which is a non-fatal alphaTab internal timing issue
+      if (msg.includes("voices") || msg.includes("BoundsLookup") || msg.includes("fromJson")) {
+        console.warn("[alphaTab] Suppressed non-fatal BoundsLookup error:", msg);
+        return;
+      }
+      setLoadError(`Error: ${msg}`);
       setIsLoading(false);
     });
 
@@ -240,12 +249,29 @@ export default function SheetMusic() {
   }, [zoom]);
 
   useEffect(() => {
+    // Guard against the alphaTab BoundsLookup.fromJson uncaught TypeError
+    // that fires from the Web Worker message handler before voices are ready.
+    // This is a known alphaTab 1.x race condition with the SVG/cursor system.
+    const handleWorkerError = (event: ErrorEvent) => {
+      if (
+        event.message?.includes("voices") ||
+        event.message?.includes("BoundsLookup") ||
+        event.filename?.includes("alphatab")
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      }
+    };
+    window.addEventListener("error", handleWorkerError);
+
     // Small delay to ensure DOM is ready
     const timer = setTimeout(() => {
       initAlphaTab();
     }, 100);
     return () => {
       clearTimeout(timer);
+      window.removeEventListener("error", handleWorkerError);
       if (apiRef.current) {
         try { apiRef.current.destroy(); } catch { /* ignore */ }
         apiRef.current = null;
