@@ -201,6 +201,17 @@ export const translations = {
     seqExporterDesc: "Chord progression → sequence JSON",
     seqVisualizerDesc: "Paste JSON → piano roll",
     seqSubtitleSuffix: "a minimal, interoperable structure for timed musical events aligned with the Web Audio API, MIDI 1.0, and OSC.",
+
+    // Sheet Music page
+    sheetMusicModule: "SHEET MUSIC",
+    sheetMusicTitle: "樂譜 — Sheet Music",
+    sheetMusicSubtitle: "Render & play music notation · MusicXML · Guitar Pro · alphaTex",
+    sheetMusicAbout: "About",
+    sheetMusicSamples: "SAMPLE SCORES",
+    sheetMusicUpload: "UPLOAD YOUR SCORE",
+    sheetMusicDropFile: "Drop or click to upload",
+    sheetMusicZoom: "ZOOM",
+    sheetMusicNav: "Sheet Music",
   },
 
   zh: {
@@ -395,6 +406,17 @@ export const translations = {
     seqExporterDesc: "和弦進行 → 音序 JSON",
     seqVisualizerDesc: "貼上 JSON → 鋼琴捲軸",
     seqSubtitleSuffix: "一種與 Web Audio API、MIDI 1.0 及 OSC 對齊的最小化、可互通音樂事件結構。",
+
+    // Sheet Music page
+    sheetMusicModule: "樂譜",
+    sheetMusicTitle: "樂譜",
+    sheetMusicSubtitle: "渲染並播放樂譜 · MusicXML · Guitar Pro · alphaTex",
+    sheetMusicAbout: "關於",
+    sheetMusicSamples: "範例樂譜",
+    sheetMusicUpload: "上傳您的樂譜",
+    sheetMusicDropFile: "拖放或點擊上傳",
+    sheetMusicZoom: "縮放",
+    sheetMusicNav: "樂譜",
   },
 
   ja: {
@@ -589,6 +611,17 @@ export const translations = {
     seqExporterDesc: "コード進行 → シーケンス JSON",
     seqVisualizerDesc: "JSON貼り付け → ピアノロール",
     seqSubtitleSuffix: "Web Audio API、MIDI 1.0、OSCに対応した最小限の相互運用可能な音楽イベント構造。",
+
+    // Sheet Music page
+    sheetMusicModule: "楽譜",
+    sheetMusicTitle: "楽譜 — Sheet Music",
+    sheetMusicSubtitle: "楽譜のレンダリングと演奏 · MusicXML · Guitar Pro · alphaTex",
+    sheetMusicAbout: "概要",
+    sheetMusicSamples: "サンプル楽譜",
+    sheetMusicUpload: "楽譜をアップロード",
+    sheetMusicDropFile: "ドロップまたはクリックしてアップロード",
+    sheetMusicZoom: "ズーム",
+    sheetMusicNav: "楽譜",
   },
 } as const;
 

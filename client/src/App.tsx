@@ -14,6 +14,7 @@ import MusicTheory from "./pages/MusicTheory";
 import SignalProcessing from "./pages/SignalProcessing";
 import Acoustics from "./pages/Acoustics";
 import Sequencer from "./pages/Sequencer";
+import SheetMusic from "./pages/SheetMusic";
 import Layout from "./components/Layout";
 
 function Router() {
@@ -25,6 +26,7 @@ function Router() {
         <Route path="/signal-processing" component={SignalProcessing} />
         <Route path="/acoustics" component={Acoustics} />
         <Route path="/sequencer" component={Sequencer} />
+        <Route path="/sheet-music" component={SheetMusic} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
