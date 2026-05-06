@@ -233,3 +233,72 @@
   ::-webkit-scrollbar-thumb { background: #8a9bb0; border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: #1a2744; }
 }
+
+/* ─── alphaTab Cursor & Note Highlight Styles ──────────────────────────────
+ * These classes are injected by alphaTab into the DOM during playback.
+ * Without explicit CSS they are invisible. The cursor wrapper must have
+ * position:relative so the absolutely-positioned overlays sit correctly.
+ * Reference: https://alphatab.net/docs/reference/settings/player/cursors
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* Wrapper that alphaTab injects its SVG + cursor divs into */
+.at-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+/* The scrollable score surface */
+.at-content {
+  position: relative;
+  overflow: auto;
+  flex: 1;
+}
+
+/* ── Bar cursor: semi-transparent highlight over the current bar ── */
+.at-cursor-bar {
+  /* Vertical bar highlight — covers the full bar width */
+  background: rgba(124, 58, 237, 0.12);
+  border-left: 2px solid rgba(124, 58, 237, 0.5);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+  transition: left 0.05s linear;
+}
+
+/* ── Beat cursor: thin animated vertical line at the current beat ── */
+.at-cursor-beat {
+  background: #ff4f1f;           /* signal orange */
+  width: 2px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 0 6px rgba(255, 79, 31, 0.6);
+  transition: left 0.05s linear;
+}
+
+/* ── Selection highlight (mouse-click range) ── */
+.at-selection div {
+  background: rgba(0, 212, 255, 0.15);  /* electric cyan */
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ── Auto-scroll: smooth scroll when cursor reaches edge ── */
+.at-surface {
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+}
+
+/* ── Note highlight: the currently playing note gets a glow ring ── */
+.at-highlight * {
+  fill: #ff4f1f !important;
+  stroke: #ff4f1f !important;
+  filter: drop-shadow(0 0 3px rgba(255, 79, 31, 0.7));
+}

@@ -29,6 +29,38 @@ d5 d5 e5 c5 | d5 e5.8 f5.8 e5 c5 | d5 e5.8 f5.8 e5 d5 | c5 d5 g4 r |
 e5 e5 f5 g5 | g5 f5 e5 d5 | c5 c5 d5 e5 | d5.2 c5.4 c5.2
 `.trim();
 
+// ─── Additional sample scores in alphaTex format ────────────────────────────
+const PENTATONIC_SCALE_TEX = `
+\\title "C Major Pentatonic Scale"
+\\subtitle "5-note scale: C D E G A"
+\\tempo 90
+\\clef G2
+.
+:4 c5 d5 e5 g5 | a5 g5 e5 d5 | c5 d5 e5 g5 | a5.1 |
+:8 c5 d5 e5 g5 a5 g5 e5 d5 | c5.1
+`.trim();
+
+const BLUES_RIFF_TEX = `
+\\title "12-Bar Blues Riff"
+\\subtitle "E Blues — classic shuffle pattern"
+\\tempo 100
+\\clef G2
+.
+:8 e4 g4 a4 b4 | e4 g4 a4 b4 | e4 g4 a4 b4 | e4 g4 a4 b4 |
+a4 c5 d5 e5 | a4 c5 d5 e5 | e4 g4 a4 b4 | e4 g4 a4 b4 |
+b4 d5 e5 f5 | a4 c5 d5 e5 | e4 g4 a4 b4 | b4.2 e4.2
+`.trim();
+
+const BACH_INVENTION_TEX = `
+\\title "Two-Part Invention No. 1"
+\\subtitle "J.S. Bach, BWV 772 (excerpt)"
+\\tempo 112
+\\clef G2
+.
+:16 c5 d5 e5 f5 | g5 a5 b5 c6 | b5 g5 a5 f5 | g5.4 r.4 |
+:16 e5 f5 g5 a5 | b5 c6 d6 e6 | d6 b5 c6 a5 | b5.4 r.4
+`.trim();
+
 // ─── Sample scores list ───────────────────────────────────────────────────────
 const SAMPLE_SCORES = [
   {
@@ -66,6 +98,27 @@ c5 c5 g5 g5 | a5 a5 g5.2 | f5 f5 e5 e5 | d5 d5 c5.2`,
 c5 e5 d5 c5 | b4 d5 c5 b4 | a4 b4 c5 d5 | g4.1 |
 b4 g4 a4 b4 | c5.2 d5.2 | e5 g4 f5.8 e5.8 d5 | e5.1`,
   },
+  {
+    id: "pentatonic",
+    label: "Pentatonic Scale",
+    composer: "C Major — 5 notes",
+    format: "alphaTex",
+    tex: PENTATONIC_SCALE_TEX,
+  },
+  {
+    id: "blues",
+    label: "12-Bar Blues",
+    composer: "E Blues Riff",
+    format: "alphaTex",
+    tex: BLUES_RIFF_TEX,
+  },
+  {
+    id: "bach_invention",
+    label: "Invention No. 1",
+    composer: "J.S. Bach, BWV 772",
+    format: "alphaTex",
+    tex: BACH_INVENTION_TEX,
+  },
 ];
 
 // ─── Playback state type ──────────────────────────────────────────────────────
@@ -94,6 +147,33 @@ export default function SheetMusic() {
   const [showInfo, setShowInfo] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1.0);
+  const [transpose, setTranspose] = useState(0);
+
+  // ─── Read URL params (e.g. ?tex=... from Music Theory) ─────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const texParam = params.get("tex");
+    if (texParam) {
+      const decoded = decodeURIComponent(texParam);
+      // Wait for alphaTab to be ready, then load the tex
+      const tryLoad = () => {
+        if (apiRef.current) {
+          setSelectedSample("");
+          setUploadedFileName("From Music Theory");
+          setScoreFormat("alphaTex");
+          setPlaybackState("stopped");
+          setCurrentTime(0);
+          setIsLoading(true);
+          apiRef.current.tex(decoded);
+          // Clean the URL without reloading
+          window.history.replaceState({}, "", window.location.pathname);
+        } else {
+          setTimeout(tryLoad, 200);
+        }
+      };
+      setTimeout(tryLoad, 300);
+    }
+  }, []);
 
   // ─── Initialize alphaTab ────────────────────────────────────────────────────
   const initAlphaTab = useCallback(() => {
@@ -269,6 +349,16 @@ export default function SheetMusic() {
     setZoom(val);
     if (apiRef.current) {
       apiRef.current.settings.display.scale = val;
+      apiRef.current.updateSettings();
+      apiRef.current.render();
+    }
+  };
+
+  const handleTransposeChange = (semitones: number) => {
+    setTranspose(semitones);
+    if (apiRef.current) {
+      // transpositionPitches lives in settings.notation (one entry per track)
+      apiRef.current.settings.notation.transpositionPitches = semitones !== 0 ? [semitones] : [];
       apiRef.current.updateSettings();
       apiRef.current.render();
     }
@@ -481,6 +571,46 @@ export default function SheetMusic() {
             </div>
           </div>
 
+          {/* Transpose */}
+          <div>
+            <div
+              className="text-xs font-semibold uppercase tracking-widest mb-3"
+              style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              Transpose —{" "}
+              <span style={{ color: transpose === 0 ? "#8a9bb0" : "#ff4f1f" }}>
+                {transpose > 0 ? `+${transpose}` : transpose} st
+              </span>
+            </div>
+            <input
+              type="range"
+              min={-12}
+              max={12}
+              step={1}
+              value={transpose}
+              onChange={(e) => handleTransposeChange(parseInt(e.target.value))}
+              className="w-full"
+              style={{ accentColor: "#ff4f1f" }}
+            />
+            <div className="flex justify-between text-xs mt-1" style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}>
+              <span>-12</span><span>0</span><span>+12</span>
+            </div>
+            {transpose !== 0 && (
+              <button
+                onClick={() => handleTransposeChange(0)}
+                className="mt-2 text-xs px-2 py-0.5 rounded transition-all"
+                style={{
+                  background: "rgba(255,79,31,0.1)",
+                  color: "#ff4f1f",
+                  border: "1px solid rgba(255,79,31,0.3)",
+                  fontFamily: "'IBM Plex Mono', monospace",
+                }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
           {/* Format badge */}
           <div>
             <div
@@ -558,10 +688,12 @@ export default function SheetMusic() {
           >
             <div
               ref={containerRef}
+              className="at-wrap"
               style={{
                 minHeight: 300,
                 opacity: isLoading ? 0.4 : 1,
                 transition: "opacity 0.3s ease",
+                position: "relative",
               }}
             />
           </div>

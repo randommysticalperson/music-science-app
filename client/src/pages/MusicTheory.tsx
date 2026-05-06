@@ -661,6 +661,7 @@ function ProgressionsTabInner({ rootNote }: { rootNote: number }) {
 type Tab = "scales" | "chords" | "intervals" | "progressions";
 
 export default function MusicTheory() {
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("scales");
   const [rootNote, setRootNote] = useState(0); // C
   const [selectedScale, setSelectedScale] = useState("Major");
@@ -691,6 +692,31 @@ export default function MusicTheory() {
     }
     return audioCtxRef.current;
   }, []);
+
+  // ── Send current scale to Sheet Music module as alphaTex ─────────────────────
+  const sendToSheetMusic = useCallback(() => {
+    const rootName = NOTE_NAMES[rootNote];
+    const scaleName = SCALE_KEY_MAP[selectedScale] ? selectedScale : selectedScale;
+    const intervals = SCALES[selectedScale].intervals;
+    // Build note sequence: ascending then descending
+    const noteNames = intervals.map((i: number) => {
+      const midi = 60 + rootNote + i; // C4 = 60 as base
+      const octave = Math.floor(midi / 12) - 1;
+      const name = NOTE_NAMES[(rootNote + i) % 12].toLowerCase().replace("#", "s");
+      return `${name}${octave}`;
+    });
+    // Add octave root at the end
+    const topNote = NOTE_NAMES[rootNote].toLowerCase().replace("#", "s") + "5";
+    const allNotes = [...noteNames, topNote, ...noteNames.slice().reverse()];
+    const tex = `\\title "${rootName} ${scaleName} Scale"
+\\subtitle "${allNotes.length} notes"
+\\tempo 80
+\\clef G2
+.
+:4 ${allNotes.join(" ")}`;
+    const encoded = encodeURIComponent(tex);
+    setLocation(`/sheet-music?tex=${encoded}`);
+  }, [rootNote, selectedScale, setLocation]);
 
   // ── Keyboard event handlers (notes + sustain pedal) ──────────────────────────────
   useEffect(() => {
@@ -1268,17 +1294,32 @@ export default function MusicTheory() {
                       {SCALES[selectedScale].intervals.map((i) => NOTE_NAMES[(rootNote + i) % 12]).join(" – ")}
                     </div>
                   </div>
-                  <button
-                    onClick={playScale}
-                    className="px-4 py-2 rounded text-sm font-medium transition-all hover:opacity-90"
-                    style={{
-                      background: "#ff4f1f",
-                      color: "white",
-                      fontFamily: "'DM Sans', sans-serif",
-                    }}
-                  >
-                    ▶ {t("mtPlayScale")}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={playScale}
+                      className="px-4 py-2 rounded text-sm font-medium transition-all hover:opacity-90"
+                      style={{
+                        background: "#ff4f1f",
+                        color: "white",
+                        fontFamily: "'DM Sans', sans-serif",
+                      }}
+                    >
+                      ▶ {t("mtPlayScale")}
+                    </button>
+                    <button
+                      onClick={sendToSheetMusic}
+                      className="px-4 py-2 rounded text-sm font-medium transition-all hover:opacity-90 flex items-center gap-1.5"
+                      style={{
+                        background: "rgba(124,58,237,0.1)",
+                        color: "#7c3aed",
+                        border: "1px solid rgba(124,58,237,0.3)",
+                        fontFamily: "'DM Sans', sans-serif",
+                      }}
+                      title="Open this scale as sheet music"
+                    >
+                      🎵 View in 樂譜
+                    </button>
+                  </div>
                 </div>
                 <p className="text-sm leading-relaxed" style={{ color: "#4a5568" }}>
                   {SCALES[selectedScale].description}
