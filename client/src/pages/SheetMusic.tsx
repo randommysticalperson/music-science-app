@@ -16,50 +16,43 @@ import { Music, Upload, Play, Pause, Square, SkipBack, Volume2, ChevronDown, Che
 import * as alphaTab from "@coderline/alphatab";
 
 // ─── Built-in demo score in alphaTex format ───────────────────────────────────
-// Ode to Joy (Beethoven) — first 8 bars, treble clef
-const ODE_TO_JOY_TEX = `
-\\title "Ode to Joy"
+// Ode to Joy (Beethoven) — first 16 bars, treble clef
+// alphaTex pitched note syntax: NoteOctave (e.g. E5, F5, G5)
+// Duration change: :4 = quarter, :8 = eighth, :2 = half, :1 = whole
+// Beat duration suffix: note.duration overrides for that beat only
+const ODE_TO_JOY_TEX = `\\title "Ode to Joy"
 \\subtitle "L. van Beethoven, Op. 125"
 \\tempo 120
-\\clef G2
-.
-:4 e5 e5 f5 g5 | g5 f5 e5 d5 | c5 c5 d5 e5 | e5.2 d5.4 d5.2 |
-e5 e5 f5 g5 | g5 f5 e5 d5 | c5 c5 d5 e5 | d5.2 c5.4 c5.2 |
-d5 d5 e5 c5 | d5 e5.8 f5.8 e5 c5 | d5 e5.8 f5.8 e5 d5 | c5 d5 g4 r |
-e5 e5 f5 g5 | g5 f5 e5 d5 | c5 c5 d5 e5 | d5.2 c5.4 c5.2
-`.trim();
+\\tuning piano
+\\ts 4 4 :4 E5 E5 F5 G5 | G5 F5 E5 D5 | C5 C5 D5 E5 | E5.2 D5 D5.2 |
+E5 E5 F5 G5 | G5 F5 E5 D5 | C5 C5 D5 E5 | D5.2 C5 C5.2 |
+D5 D5 E5 C5 | D5 :8 E5 F5 :4 E5 C5 | D5 :8 E5 F5 :4 E5 D5 | C5 D5 G4 r |
+E5 E5 F5 G5 | G5 F5 E5 D5 | C5 C5 D5 E5 | D5.2 C5 C5.2`.trim();
 
 // ─── Additional sample scores in alphaTex format ────────────────────────────
-const PENTATONIC_SCALE_TEX = `
-\\title "C Major Pentatonic Scale"
+const PENTATONIC_SCALE_TEX = `\\title "C Major Pentatonic Scale"
 \\subtitle "5-note scale: C D E G A"
-\\tempo 90
-\\clef G2
-.
-:4 c5 d5 e5 g5 | a5 g5 e5 d5 | c5 d5 e5 g5 | a5.1 |
-:8 c5 d5 e5 g5 a5 g5 e5 d5 | c5.1
-`.trim();
+\\tempo 80
+\\tuning piano
+\\ts 4 4 :4 C5 D5 E5 G5 | A5 G5 E5 D5 | C5 D5 E5 G5 | A5 G5 E5 C5 |
+:8 C5 D5 E5 G5 A5 G5 E5 D5 | C5.1`.trim();
 
-const BLUES_RIFF_TEX = `
-\\title "12-Bar Blues Riff"
+const BLUES_RIFF_TEX = `\\title "12-Bar Blues Riff"
 \\subtitle "E Blues — classic shuffle pattern"
 \\tempo 100
-\\clef G2
-.
-:8 e4 g4 a4 b4 | e4 g4 a4 b4 | e4 g4 a4 b4 | e4 g4 a4 b4 |
-a4 c5 d5 e5 | a4 c5 d5 e5 | e4 g4 a4 b4 | e4 g4 a4 b4 |
-b4 d5 e5 f5 | a4 c5 d5 e5 | e4 g4 a4 b4 | b4.2 e4.2
-`.trim();
+\\tuning piano
+\\ts 4 4 :4 E4 G4 A4 B4 | E4 G4 A4 B4 | E4 G4 A4 B4 | E4 G4 A4 B4 |
+A4 C5 D5 E5 | A4 C5 D5 E5 | E4 G4 A4 B4 | E4 G4 A4 B4 |
+B4 D5 E5 F5 | A4 C5 D5 E5 | E4 G4 A4 B4 | B4.2 E4.2`.trim();
 
-const BACH_INVENTION_TEX = `
-\\title "Two-Part Invention No. 1"
+const BACH_INVENTION_TEX = `\\title "Two-Part Invention No. 1"
 \\subtitle "J.S. Bach, BWV 772 (excerpt)"
 \\tempo 112
-\\clef G2
-.
-:16 c5 d5 e5 f5 | g5 a5 b5 c6 | b5 g5 a5 f5 | g5.4 r.4 |
-:16 e5 f5 g5 a5 | b5 c6 d6 e6 | d6 b5 c6 a5 | b5.4 r.4
-`.trim();
+\\tuning piano
+\\ts 4 4 :16 C5 D5 E5 F5 G5 A5 B5 C6 | B5 G5 A5 F5 :8 G5 r |
+:16 E5 F5 G5 A5 B5 C6 D6 E6 | D6 B5 C6 A5 :8 B5 r |
+:16 C6 B5 A5 G5 F5 E5 D5 C5 | B4 C5 D5 E5 :8 F5 r |
+:4 G5 F5 E5 D5 | C5.1`.trim();
 
 // ─── Sample scores list ───────────────────────────────────────────────────────
 const SAMPLE_SCORES = [
@@ -78,11 +71,10 @@ const SAMPLE_SCORES = [
     tex: `\\title "Twinkle Twinkle Little Star"
 \\subtitle "Traditional"
 \\tempo 100
-\\clef G2
-.
-:4 c5 c5 g5 g5 | a5 a5 g5.2 | f5 f5 e5 e5 | d5 d5 c5.2 |
-g5 g5 f5 f5 | e5 e5 d5.2 | g5 g5 f5 f5 | e5 e5 d5.2 |
-c5 c5 g5 g5 | a5 a5 g5.2 | f5 f5 e5 e5 | d5 d5 c5.2`,
+\\tuning piano
+\\ts 4 4 :4 C5 C5 G5 G5 | A5 A5 G5.2 | F5 F5 E5 E5 | D5 D5 C5.2 |
+G5 G5 F5 F5 | E5 E5 D5.2 | G5 G5 F5 F5 | E5 E5 D5.2 |
+C5 C5 G5 G5 | A5 A5 G5.2 | F5 F5 E5 E5 | D5 D5 C5.2`.trim(),
   },
   {
     id: "minuet",
@@ -92,11 +84,10 @@ c5 c5 g5 g5 | a5 a5 g5.2 | f5 f5 e5 e5 | d5 d5 c5.2`,
     tex: `\\title "Minuet in G"
 \\subtitle "J.S. Bach, BWV Anh. 114"
 \\tempo 132
-\\clef G2
-.
-:4 d5 g4 a4 b4 | c5 d5 g4.2 | e5 c5 d5 e5 | f5.8 e5.8 d5.2 |
-c5 e5 d5 c5 | b4 d5 c5 b4 | a4 b4 c5 d5 | g4.1 |
-b4 g4 a4 b4 | c5.2 d5.2 | e5 g4 f5.8 e5.8 d5 | e5.1`,
+\\tuning piano
+\\ts 3 4 :4 D5 G4 A4 | B4 C5 D5 | G4.2 r | E5 C5 D5 | E5 F5 E5 | D5.2 r |
+C5 E5 D5 | C5 B4 A4 | B4 C5 D5 | G4.2 r |
+B4 G4 A4 | B4 C5 D5 | E5.2 r | D5 C5 B4 | C5.2 r`.trim(),
   },
   {
     id: "pentatonic",
