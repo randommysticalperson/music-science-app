@@ -718,6 +718,31 @@ export default function MusicTheory() {
     setLocation(`/sheet-music?tex=${encoded}`);
   }, [rootNote, selectedScale, setLocation]);
 
+  // ── Send current chord to Sheet Music module as alphaTex ─────────────────────
+  const sendChordToSheetMusic = useCallback(() => {
+    const chord = CHORD_TYPES[selectedChord];
+    const rootName = NOTE_NAMES[rootNote];
+    // Build arpeggio: ascending then descending
+    const toAlphaTex = (semitone: number) => {
+      const midi = 60 + rootNote + semitone;
+      const octave = Math.floor(midi / 12) - 1;
+      const name = NOTE_NAMES[(rootNote + semitone) % 12].toLowerCase().replace("#", "s");
+      return `${name}${octave}`;
+    };
+    const ascending = chord.intervals.map(toAlphaTex);
+    const descending = [...chord.intervals].reverse().map(toAlphaTex);
+    const allNotes = [...ascending, ...descending];
+    const chordLabel = `${rootName}${chord.symbol}`;
+    const tex = `\\title "${chordLabel} Chord Arpeggio"
+\\subtitle "${chord.intervals.map((i: number) => NOTE_NAMES[(rootNote + i) % 12]).join(" + ")}"
+\\tempo 72
+\\clef G2
+.
+:4 ${allNotes.join(" ")}`;
+    const encoded = encodeURIComponent(tex);
+    setLocation(`/sheet-music?tex=${encoded}`);
+  }, [rootNote, selectedChord, setLocation]);
+
   // ── Keyboard event handlers (notes + sustain pedal) ──────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1429,13 +1454,30 @@ export default function MusicTheory() {
                         .join(" + ")}
                     </div>
                   </div>
-                  <button
-                    onClick={playChord}
-                    className="px-4 py-2 rounded text-sm font-medium transition-all hover:opacity-90"
-                    style={{ background: "#ff4f1f", color: "white", fontFamily: "'DM Sans', sans-serif" }}
-                  >
-                    ▶ {t("mtPlayChord")}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={playChord}
+                      className="px-4 py-2 rounded text-sm font-medium transition-all hover:opacity-90"
+                      style={{ background: "#ff4f1f", color: "white", fontFamily: "'DM Sans', sans-serif" }}
+                    >
+                      ▶ {t("mtPlayChord")}
+                    </button>
+                    <button
+                      onClick={sendChordToSheetMusic}
+                      className="px-4 py-2 rounded text-sm font-medium transition-all"
+                      style={{
+                        background: "rgba(0,212,255,0.12)",
+                        color: "#00d4ff",
+                        border: "1px solid rgba(0,212,255,0.3)",
+                        fontFamily: "'DM Sans', sans-serif",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,212,255,0.22)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,212,255,0.12)"; }}
+                      title="View chord arpeggio in Sheet Music module"
+                    >
+                      🎵 View in 樂譜
+                    </button>
+                  </div>
                 </div>
                 <p className="text-sm leading-relaxed" style={{ color: "#4a5568" }}>
                   {CHORD_TYPES[selectedChord].description}

@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLang } from "../contexts/LanguageContext";
-import { Music, Upload, Play, Pause, Square, SkipBack, Volume2, ChevronDown, ChevronUp, FileMusic, Info } from "lucide-react";
+import { Music, Upload, Play, Pause, Square, SkipBack, Volume2, ChevronDown, ChevronUp, FileMusic, Info, Download, Repeat, Database, ExternalLink } from "lucide-react";
 import * as alphaTab from "@coderline/alphatab";
 
 // ─── Built-in demo score in alphaTex format ───────────────────────────────────
@@ -188,6 +188,8 @@ export default function SheetMusic() {
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1.0);
   const [transpose, setTranspose] = useState(0);
+  const [isLooping, setIsLooping] = useState(false);
+  const [showDatabases, setShowDatabases] = useState(false);
 
   // ─── Read URL params (e.g. ?tex=... from Music Theory) ─────────────────────
   useEffect(() => {
@@ -444,6 +446,24 @@ export default function SheetMusic() {
       apiRef.current.updateSettings();
       apiRef.current.render();
     }
+  };
+
+  // ─── MIDI Export ────────────────────────────────────────────────────────────
+  const handleDownloadMidi = () => {
+    if (!apiRef.current) return;
+    try {
+      apiRef.current.downloadMidi();
+    } catch (err) {
+      console.error("MIDI export failed:", err);
+    }
+  };
+
+  // ─── Loop toggle ─────────────────────────────────────────────────────────────
+  const handleLoopToggle = () => {
+    if (!apiRef.current) return;
+    const next = !isLooping;
+    setIsLooping(next);
+    apiRef.current.isLooping = next;
   };
 
   // ─── Format time ────────────────────────────────────────────────────────────
@@ -703,6 +723,73 @@ export default function SheetMusic() {
             )}
           </div>
 
+          {/* Score Databases */}
+          <div>
+            <button
+              onClick={() => setShowDatabases((v) => !v)}
+              className="w-full flex items-center justify-between py-1 transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <Database size={13} style={{ color: "#00d4ff" }} />
+                <span
+                  className="text-xs font-semibold uppercase tracking-widest"
+                  style={{ color: "#00d4ff", fontFamily: "'IBM Plex Mono', monospace" }}
+                >
+                  Score Databases
+                </span>
+              </div>
+              {showDatabases ? <ChevronUp size={13} style={{ color: "#00d4ff" }} /> : <ChevronDown size={13} style={{ color: "#8a9bb0" }} />}
+            </button>
+            {showDatabases && (
+              <div className="mt-3 space-y-2">
+                {([
+                  { name: "IMSLP", desc: "600k+ public domain scores", url: "https://imslp.org" },
+                  { name: "MuseScore", desc: "Community sheet music", url: "https://musescore.com" },
+                  { name: "Mutopia Project", desc: "Free LilyPond scores", url: "https://www.mutopiaproject.org" },
+                  { name: "OpenScore", desc: "High-quality MusicXML", url: "https://openscore.musescore.com" },
+                  { name: "Kern Scores", desc: "Academic Humdrum dataset", url: "https://kern.humdrum.org" },
+                  { name: "MusicXML.com", desc: "Official MusicXML examples", url: "https://www.musicxml.com/music-in-musicxml/example-set/" },
+                  { name: "CPDL", desc: "Choral public domain", url: "https://www.cpdl.org" },
+                  { name: "Free-Scores", desc: "Free classical sheet music", url: "https://www.free-scores.com" },
+                  { name: "8notes", desc: "Graded sheet music library", url: "https://www.8notes.com" },
+                  { name: "JW Pepper", desc: "Ensemble & band scores", url: "https://www.jwpepper.com" },
+                  { name: "Sheet Music Plus", desc: "Large commercial catalog", url: "https://www.sheetmusicplus.com" },
+                  { name: "MIDI World", desc: "MIDI file repository", url: "https://www.midiworld.com" },
+                ] as { name: string; desc: string; url: string }[]).map((db) => (
+                  <a
+                    key={db.name}
+                    href={db.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start justify-between gap-2 px-2.5 py-2 rounded transition-all group"
+                    style={{
+                      background: "rgba(0,212,255,0.04)",
+                      border: "1px solid rgba(0,212,255,0.1)",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,212,255,0.1)"; e.currentTarget.style.borderColor = "rgba(0,212,255,0.3)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,212,255,0.04)"; e.currentTarget.style.borderColor = "rgba(0,212,255,0.1)"; }}
+                  >
+                    <div className="min-w-0">
+                      <div
+                        className="text-xs font-semibold truncate"
+                        style={{ color: "#1a2744", fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        {db.name}
+                      </div>
+                      <div
+                        className="text-xs mt-0.5 truncate"
+                        style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px" }}
+                      >
+                        {db.desc}
+                      </div>
+                    </div>
+                    <ExternalLink size={11} className="shrink-0 mt-0.5" style={{ color: "#00d4ff", opacity: 0.7 }} />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Format badge */}
           <div>
             <div
@@ -908,6 +995,38 @@ export default function SheetMusic() {
                   {Math.round(volume * 100)}%
                 </span>
               </div>
+
+              {/* Loop toggle */}
+              <button
+                onClick={handleLoopToggle}
+                className="w-9 h-9 rounded flex items-center justify-center transition-all"
+                style={{
+                  background: isLooping ? "rgba(0,212,255,0.2)" : "rgba(255,255,255,0.08)",
+                  color: isLooping ? "#00d4ff" : "#8a9bb0",
+                  border: isLooping ? "1px solid rgba(0,212,255,0.4)" : "1px solid transparent",
+                }}
+                title={isLooping ? "Loop ON — click to disable" : "Loop OFF — click to enable"}
+              >
+                <Repeat size={15} />
+              </button>
+
+              {/* MIDI Download */}
+              <button
+                onClick={handleDownloadMidi}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#8a9bb0",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  fontFamily: "'IBM Plex Mono', monospace",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(124,58,237,0.25)"; e.currentTarget.style.color = "#a855f7"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#8a9bb0"; }}
+                title="Export as MIDI file"
+              >
+                <Download size={13} />
+                MIDI
+              </button>
 
               {/* Status badge */}
               <div
