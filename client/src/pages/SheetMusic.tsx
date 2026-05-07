@@ -110,6 +110,55 @@ B4 G4 A4 | B4 C5 D5 | E5.2 r | D5 C5 B4 | C5.2 r`.trim(),
     format: "alphaTex",
     tex: BACH_INVENTION_TEX,
   },
+  // ── Real MusicXML scores from musicxml.com official example set ──────────────
+  {
+    id: "mozart_sonata",
+    label: "Piano Sonata K. 331",
+    composer: "W.A. Mozart",
+    format: "musicxml",
+    url: "/manus-storage/MozartPianoSonata_a3dfaad3.musicxml",
+    description: "Andante grazioso theme (MusicXML 4.0 official example)",
+  },
+  {
+    id: "mozart_trio",
+    label: "Piano Trio K. 254",
+    composer: "W.A. Mozart",
+    format: "musicxml",
+    url: "/manus-storage/MozartTrio_153c3060.musicxml",
+    description: "Chamber music — piano, violin, cello (MusicXML 4.0 official example)",
+  },
+  {
+    id: "debussy_mandoline",
+    label: "Mandoline",
+    composer: "Claude Debussy",
+    format: "musicxml",
+    url: "/manus-storage/DebuMandSample_6e43708b.musicxml",
+    description: "Impressionist art song, voice & piano (MusicXML 4.0 official example)",
+  },
+  {
+    id: "dichterliebe",
+    label: "Dichterliebe Op. 48",
+    composer: "Robert Schumann",
+    format: "musicxml",
+    url: "/manus-storage/Dichterliebe01_3ab66778.musicxml",
+    description: "Im wunderschönen Monat Mai — complete song (MusicXML 4.0 official example)",
+  },
+  {
+    id: "echigo_jishi",
+    label: "Echigo-Jishi",
+    composer: "Traditional Japanese",
+    format: "musicxml",
+    url: "/manus-storage/Echigo-Jishi_ac476fd4.musicxml",
+    description: "Traditional Japanese shamisen piece (MusicXML 4.0 official example)",
+  },
+  {
+    id: "gregorian_chant",
+    label: "Gregorian Chant",
+    composer: "Medieval Plainchant",
+    format: "musicxml",
+    url: "/manus-storage/Chant_1492e9e9.musicxml",
+    description: "Medieval plainchant notation example (MusicXML 4.0 official example)",
+  },
 ];
 
 // ─── Playback state type ──────────────────────────────────────────────────────
@@ -285,7 +334,23 @@ export default function SheetMusic() {
     setCurrentTime(0);
     setIsLoading(true);
     setLoadError(null);
-    at.tex(sample.tex);
+    if (sample.format === "musicxml" && sample.url) {
+      // Load MusicXML from URL — alphaTab.load() needs ArrayBuffer, not raw text
+      fetch(sample.url)
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.arrayBuffer();
+        })
+        .then((buf) => {
+          at.load(new Uint8Array(buf));
+        })
+        .catch((err) => {
+          setLoadError(`Failed to load MusicXML: ${err.message}`);
+          setIsLoading(false);
+        });
+    } else if (sample.tex) {
+      at.tex(sample.tex);
+    }
   };
 
   // ─── Handle file upload ─────────────────────────────────────────────────────
@@ -511,11 +576,21 @@ export default function SheetMusic() {
                   >
                     {s.label}
                   </div>
-                  <div
-                    className="text-xs mt-0.5"
-                    style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    {s.composer}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span
+                      className="text-xs"
+                      style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}
+                    >
+                      {s.composer}
+                    </span>
+                    {s.format === "musicxml" && (
+                      <span
+                        className="text-xs px-1 rounded"
+                        style={{ background: "rgba(0,212,255,0.12)", color: "#00d4ff", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.05em" }}
+                      >
+                        MusicXML
+                      </span>
+                    )}
                   </div>
                 </button>
               ))}
