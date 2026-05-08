@@ -190,6 +190,7 @@ export default function SheetMusic() {
   const [transpose, setTranspose] = useState(0);
   const [isLooping, setIsLooping] = useState(false);
   const [showDatabases, setShowDatabases] = useState(false);
+  const [dbSearch, setDbSearch] = useState("");
 
   // ─── Read URL params (e.g. ?tex=... from Music Theory) ─────────────────────
   useEffect(() => {
@@ -741,7 +742,50 @@ export default function SheetMusic() {
               {showDatabases ? <ChevronUp size={13} style={{ color: "#00d4ff" }} /> : <ChevronDown size={13} style={{ color: "#8a9bb0" }} />}
             </button>
             {showDatabases && (
-              <div className="mt-3 space-y-4">
+              <div className="mt-3 space-y-3">
+                {/* Search shortcut */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search a database…"
+                    value={dbSearch}
+                    onChange={(e) => setDbSearch(e.target.value)}
+                    className="w-full text-xs px-2.5 py-1.5 rounded outline-none"
+                    style={{
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      color: "#e8f4f8",
+                      fontFamily: "'IBM Plex Mono', monospace",
+                    }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(0,212,255,0.4)"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+                  />
+                  {dbSearch.trim() && (
+                    <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                      {([
+                        { label: "MuseScore", url: `https://musescore.com/sheetmusic?text=${encodeURIComponent(dbSearch)}`, color: "#00d4ff" },
+                        { label: "IMSLP", url: `https://imslp.org/wiki/Special:Search?search=${encodeURIComponent(dbSearch)}`, color: "#00d4ff" },
+                        { label: "Google", url: `https://www.google.com/search?q=${encodeURIComponent(dbSearch + " sheet music")}`, color: "#8a9bb0" },
+                      ]).map((s) => (
+                        <a
+                          key={s.label}
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-all"
+                          style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${s.color}40`, color: s.color, fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                        >
+                          <ExternalLink size={9} />
+                          {s.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Regional sections */}
                 {([
                   {
                     region: "🌐 International",
@@ -749,16 +793,16 @@ export default function SheetMusic() {
                     bg: "rgba(0,212,255,0.06)",
                     border: "rgba(0,212,255,0.15)",
                     dbs: [
-                      { name: "IMSLP", desc: "600k+ public domain scores", url: "https://imslp.org" },
-                      { name: "MuseScore", desc: "Community sheet music", url: "https://musescore.com" },
-                      { name: "Mutopia Project", desc: "Free LilyPond scores", url: "https://www.mutopiaproject.org" },
-                      { name: "OpenScore", desc: "High-quality MusicXML", url: "https://openscore.musescore.com" },
-                      { name: "Kern Scores", desc: "Academic Humdrum dataset", url: "https://kern.humdrum.org" },
-                      { name: "MusicXML.com", desc: "Official MusicXML examples", url: "https://www.musicxml.com/music-in-musicxml/example-set/" },
-                      { name: "CPDL", desc: "Choral public domain", url: "https://www.cpdl.org" },
-                      { name: "Free-Scores", desc: "Free classical sheet music", url: "https://www.free-scores.com" },
-                      { name: "8notes", desc: "Graded sheet music library", url: "https://www.8notes.com" },
-                      { name: "MIDI World", desc: "MIDI file repository", url: "https://www.midiworld.com" },
+                      { name: "IMSLP",           desc: "600k+ public domain scores",   url: "https://imslp.org",                                              badges: ["PDF","MusicXML","Free"] },
+                      { name: "MuseScore",        desc: "Community sheet music",        url: "https://musescore.com",                                          badges: ["PDF","MIDI","MusicXML","Free"] },
+                      { name: "Mutopia Project",  desc: "Free LilyPond scores",         url: "https://www.mutopiaproject.org",                                 badges: ["PDF","MIDI","Free"] },
+                      { name: "OpenScore",        desc: "High-quality MusicXML",        url: "https://openscore.musescore.com",                                badges: ["MusicXML","Free"] },
+                      { name: "Kern Scores",      desc: "Academic Humdrum dataset",     url: "https://kern.humdrum.org",                                       badges: ["MusicXML","MIDI","Free"] },
+                      { name: "MusicXML.com",     desc: "Official MusicXML examples",   url: "https://www.musicxml.com/music-in-musicxml/example-set/",        badges: ["MusicXML","Free"] },
+                      { name: "CPDL",             desc: "Choral public domain",         url: "https://www.cpdl.org",                                           badges: ["PDF","MIDI","Free"] },
+                      { name: "Free-Scores",      desc: "Free classical sheet music",   url: "https://www.free-scores.com",                                    badges: ["PDF","MIDI","Free"] },
+                      { name: "8notes",           desc: "Graded sheet music library",   url: "https://www.8notes.com",                                         badges: ["PDF","MIDI","Free"] },
+                      { name: "MIDI World",       desc: "MIDI file repository",         url: "https://www.midiworld.com",                                      badges: ["MIDI","Free"] },
                     ],
                   },
                   {
@@ -767,11 +811,11 @@ export default function SheetMusic() {
                     bg: "rgba(255,79,31,0.05)",
                     border: "rgba(255,79,31,0.15)",
                     dbs: [
-                      { name: "楽譜ネット", desc: "国内最大 300k+ 楽譜データベース (1998)", url: "https://www.gakufu.ne.jp/" },
-                      { name: "ぷりんと楽譜 (Yamaha)", desc: "ヤマハ公式 PDF/MIDI ダウンロード", url: "https://www.print-gakufu.com/" },
-                      { name: "Piascore 楽譜ストア", desc: "30万曲以上・タブレット対応", url: "https://store.piascore.com/" },
-                      { name: "J-Total Music", desc: "無料ギターコード譜・J-POP 歌詞", url: "https://music.j-total.net/" },
-                      { name: "PopPiano (日本語)", desc: "無料ピアノ楽譜 PDF・アニメ/J-POP", url: "https://www.poppiano.org/jp/" },
+                      { name: "楽譜ネット",            desc: "国内最大 300k+ 楽譜データベース",  url: "https://www.gakufu.ne.jp/",         badges: ["PDF","Paid"] },
+                      { name: "ぷりんと楽譜 (Yamaha)", desc: "ヤマハ公式 PDF/MIDI ダウンロード", url: "https://www.print-gakufu.com/",      badges: ["PDF","MIDI","Paid"] },
+                      { name: "Piascore 楽譜ストア",   desc: "30万曲以上・タブレット対応",       url: "https://store.piascore.com/",       badges: ["PDF","Paid"] },
+                      { name: "J-Total Music",         desc: "無料ギターコード譜・J-POP 歌詞",   url: "https://music.j-total.net/",        badges: ["PDF","Free"] },
+                      { name: "PopPiano (日本語)",      desc: "無料ピアノ楽譜 PDF・アニメ/J-POP", url: "https://www.poppiano.org/jp/",      badges: ["PDF","Free"] },
                     ],
                   },
                   {
@@ -780,52 +824,105 @@ export default function SheetMusic() {
                     bg: "rgba(168,85,247,0.05)",
                     border: "rgba(168,85,247,0.15)",
                     dbs: [
-                      { name: "中國曲譜網", desc: "10萬+ 簡譜/五線譜/鋼琴/吉他/戲曲", url: "https://www.qupu123.com/" },
-                      { name: "樂譜網", desc: "免費二胡/古箏/琵琶/鋼琴樂譜", url: "https://www.yuepuwang.com.cn/" },
-                      { name: "臺灣音樂館 Open Museum", desc: "台灣傳統音樂典藏・原住民族音樂", url: "https://tmi.openmuseum.tw/objects" },
-                      { name: "PopPiano (繁體中文)", desc: "免費鋼琴樂譜 PDF・港台流行音樂", url: "https://www.poppiano.org/zh/" },
+                      { name: "中國曲譜網",             desc: "10萬+ 簡譜/五線譜/鋼琴/吉他/戲曲", url: "https://www.qupu123.com/",           badges: ["PDF","Free"] },
+                      { name: "樂譜網",                 desc: "免費二胡/古箏/琵琶/鋼琴樂譜",      url: "https://www.yuepuwang.com.cn/",     badges: ["PDF","Free"] },
+                      { name: "臺灣音樂館 Open Museum", desc: "台灣傳統音樂典藏・原住民族音樂",    url: "https://tmi.openmuseum.tw/objects", badges: ["PDF","Free"] },
+                      { name: "PopPiano (繁體中文)",    desc: "免費鋼琴樂譜 PDF・港台流行音樂",   url: "https://www.poppiano.org/zh/",      badges: ["PDF","Free"] },
                     ],
                   },
-                ] as { region: string; color: string; bg: string; border: string; dbs: { name: string; desc: string; url: string }[] }[]).map((section) => (
-                  <div key={section.region}>
-                    <div
-                      className="text-xs font-bold mb-1.5 uppercase tracking-wider"
-                      style={{ color: section.color, fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px" }}
-                    >
-                      {section.region}
-                    </div>
-                    <div className="space-y-1.5">
-                      {section.dbs.map((db) => (
-                        <a
-                          key={db.name}
-                          href={db.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-start justify-between gap-2 px-2.5 py-2 rounded transition-all"
-                          style={{ background: section.bg, border: `1px solid ${section.border}` }}
-                          onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.3)"; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.filter = "brightness(1)"; }}
-                        >
-                          <div className="min-w-0">
-                            <div
-                              className="text-xs font-semibold truncate"
-                              style={{ color: "#1a2744", fontFamily: "'DM Sans', sans-serif" }}
-                            >
-                              {db.name}
+                  {
+                    region: "🇰🇷 한국어",
+                    color: "#22d3ee",
+                    bg: "rgba(34,211,238,0.05)",
+                    border: "rgba(34,211,238,0.15)",
+                    dbs: [
+                      { name: "악보바다",          desc: "한국 최대 100k+ 악보 (K-pop/클래식)",  url: "https://www.akbobada.com/",     badges: ["PDF","MIDI","Paid"] },
+                      { name: "DooPiano",          desc: "K-pop 피아노 편곡 전문",               url: "https://doopiano.com/",         badges: ["PDF","Paid"] },
+                      { name: "Sharmony Music",    desc: "무료 K-pop 바이올린/첼로 악보",        url: "https://sharleemusic.com/",     badges: ["PDF","Free"] },
+                      { name: "PopPiano (한국어)",  desc: "무료 피아노 악보 PDF · K-pop",        url: "https://www.poppiano.org/ko/", badges: ["PDF","Free"] },
+                    ],
+                  },
+                ] as { region: string; color: string; bg: string; border: string; dbs: { name: string; desc: string; url: string; badges: string[] }[] }[]).map((section) => {
+                  const BADGE_COLORS: Record<string, { bg: string; text: string }> = {
+                    PDF:      { bg: "rgba(0,212,255,0.12)",   text: "#00d4ff" },
+                    MIDI:     { bg: "rgba(255,79,31,0.12)",   text: "#ff7a52" },
+                    MusicXML: { bg: "rgba(168,85,247,0.12)",  text: "#c084fc" },
+                    Free:     { bg: "rgba(0,255,136,0.12)",   text: "#00cc6a" },
+                    Paid:     { bg: "rgba(251,191,36,0.12)",  text: "#fbbf24" },
+                  };
+                  const q = dbSearch.trim().toLowerCase();
+                  const filteredDbs = q
+                    ? section.dbs.filter(
+                        (db) =>
+                          db.name.toLowerCase().includes(q) ||
+                          db.desc.toLowerCase().includes(q) ||
+                          db.badges.some((b) => b.toLowerCase().includes(q))
+                      )
+                    : section.dbs;
+                  if (filteredDbs.length === 0) return null;
+                  return (
+                    <div key={section.region}>
+                      <div
+                        className="text-xs font-bold mb-1.5 uppercase tracking-wider"
+                        style={{ color: section.color, fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px" }}
+                      >
+                        {section.region}
+                      </div>
+                      <div className="space-y-1.5">
+                        {filteredDbs.map((db) => (
+                          <a
+                            key={db.name}
+                            href={db.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-start justify-between gap-2 px-2.5 py-2 rounded transition-all"
+                            style={{ background: section.bg, border: `1px solid ${section.border}` }}
+                            onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.3)"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.filter = "brightness(1)"; }}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div
+                                className="text-xs font-semibold truncate"
+                                style={{ color: "#e8f4f8", fontFamily: "'DM Sans', sans-serif" }}
+                              >
+                                {db.name}
+                              </div>
+                              <div
+                                className="mt-0.5 truncate"
+                                style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px" }}
+                              >
+                                {db.desc}
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {db.badges.map((badge) => {
+                                  const bc = BADGE_COLORS[badge] ?? { bg: "rgba(255,255,255,0.08)", text: "#8a9bb0" };
+                                  return (
+                                    <span
+                                      key={badge}
+                                      style={{
+                                        background: bc.bg,
+                                        color: bc.text,
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontSize: "8px",
+                                        padding: "1px 5px",
+                                        borderRadius: "3px",
+                                        fontWeight: 600,
+                                        letterSpacing: "0.04em",
+                                      }}
+                                    >
+                                      {badge}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <div
-                              className="mt-0.5 truncate"
-                              style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px" }}
-                            >
-                              {db.desc}
-                            </div>
-                          </div>
-                          <ExternalLink size={11} className="shrink-0 mt-0.5" style={{ color: section.color, opacity: 0.7 }} />
-                        </a>
-                      ))}
+                            <ExternalLink size={11} className="shrink-0 mt-0.5" style={{ color: section.color, opacity: 0.7 }} />
+                          </a>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
