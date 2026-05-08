@@ -741,50 +741,90 @@ export default function SheetMusic() {
               {showDatabases ? <ChevronUp size={13} style={{ color: "#00d4ff" }} /> : <ChevronDown size={13} style={{ color: "#8a9bb0" }} />}
             </button>
             {showDatabases && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-4">
                 {([
-                  { name: "IMSLP", desc: "600k+ public domain scores", url: "https://imslp.org" },
-                  { name: "MuseScore", desc: "Community sheet music", url: "https://musescore.com" },
-                  { name: "Mutopia Project", desc: "Free LilyPond scores", url: "https://www.mutopiaproject.org" },
-                  { name: "OpenScore", desc: "High-quality MusicXML", url: "https://openscore.musescore.com" },
-                  { name: "Kern Scores", desc: "Academic Humdrum dataset", url: "https://kern.humdrum.org" },
-                  { name: "MusicXML.com", desc: "Official MusicXML examples", url: "https://www.musicxml.com/music-in-musicxml/example-set/" },
-                  { name: "CPDL", desc: "Choral public domain", url: "https://www.cpdl.org" },
-                  { name: "Free-Scores", desc: "Free classical sheet music", url: "https://www.free-scores.com" },
-                  { name: "8notes", desc: "Graded sheet music library", url: "https://www.8notes.com" },
-                  { name: "JW Pepper", desc: "Ensemble & band scores", url: "https://www.jwpepper.com" },
-                  { name: "Sheet Music Plus", desc: "Large commercial catalog", url: "https://www.sheetmusicplus.com" },
-                  { name: "MIDI World", desc: "MIDI file repository", url: "https://www.midiworld.com" },
-                ] as { name: string; desc: string; url: string }[]).map((db) => (
-                  <a
-                    key={db.name}
-                    href={db.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start justify-between gap-2 px-2.5 py-2 rounded transition-all group"
-                    style={{
-                      background: "rgba(0,212,255,0.04)",
-                      border: "1px solid rgba(0,212,255,0.1)",
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,212,255,0.1)"; e.currentTarget.style.borderColor = "rgba(0,212,255,0.3)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,212,255,0.04)"; e.currentTarget.style.borderColor = "rgba(0,212,255,0.1)"; }}
-                  >
-                    <div className="min-w-0">
-                      <div
-                        className="text-xs font-semibold truncate"
-                        style={{ color: "#1a2744", fontFamily: "'DM Sans', sans-serif" }}
-                      >
-                        {db.name}
-                      </div>
-                      <div
-                        className="text-xs mt-0.5 truncate"
-                        style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px" }}
-                      >
-                        {db.desc}
-                      </div>
+                  {
+                    region: "🌐 International",
+                    color: "#00d4ff",
+                    bg: "rgba(0,212,255,0.06)",
+                    border: "rgba(0,212,255,0.15)",
+                    dbs: [
+                      { name: "IMSLP", desc: "600k+ public domain scores", url: "https://imslp.org" },
+                      { name: "MuseScore", desc: "Community sheet music", url: "https://musescore.com" },
+                      { name: "Mutopia Project", desc: "Free LilyPond scores", url: "https://www.mutopiaproject.org" },
+                      { name: "OpenScore", desc: "High-quality MusicXML", url: "https://openscore.musescore.com" },
+                      { name: "Kern Scores", desc: "Academic Humdrum dataset", url: "https://kern.humdrum.org" },
+                      { name: "MusicXML.com", desc: "Official MusicXML examples", url: "https://www.musicxml.com/music-in-musicxml/example-set/" },
+                      { name: "CPDL", desc: "Choral public domain", url: "https://www.cpdl.org" },
+                      { name: "Free-Scores", desc: "Free classical sheet music", url: "https://www.free-scores.com" },
+                      { name: "8notes", desc: "Graded sheet music library", url: "https://www.8notes.com" },
+                      { name: "MIDI World", desc: "MIDI file repository", url: "https://www.midiworld.com" },
+                    ],
+                  },
+                  {
+                    region: "🇯🇵 日本語",
+                    color: "#ff4f1f",
+                    bg: "rgba(255,79,31,0.05)",
+                    border: "rgba(255,79,31,0.15)",
+                    dbs: [
+                      { name: "楽譜ネット", desc: "国内最大 300k+ 楽譜データベース (1998)", url: "https://www.gakufu.ne.jp/" },
+                      { name: "ぷりんと楽譜 (Yamaha)", desc: "ヤマハ公式 PDF/MIDI ダウンロード", url: "https://www.print-gakufu.com/" },
+                      { name: "Piascore 楽譜ストア", desc: "30万曲以上・タブレット対応", url: "https://store.piascore.com/" },
+                      { name: "J-Total Music", desc: "無料ギターコード譜・J-POP 歌詞", url: "https://music.j-total.net/" },
+                      { name: "PopPiano (日本語)", desc: "無料ピアノ楽譜 PDF・アニメ/J-POP", url: "https://www.poppiano.org/jp/" },
+                    ],
+                  },
+                  {
+                    region: "🇹🇼🇨🇳 中文",
+                    color: "#a855f7",
+                    bg: "rgba(168,85,247,0.05)",
+                    border: "rgba(168,85,247,0.15)",
+                    dbs: [
+                      { name: "中國曲譜網", desc: "10萬+ 簡譜/五線譜/鋼琴/吉他/戲曲", url: "https://www.qupu123.com/" },
+                      { name: "樂譜網", desc: "免費二胡/古箏/琵琶/鋼琴樂譜", url: "https://www.yuepuwang.com.cn/" },
+                      { name: "臺灣音樂館 Open Museum", desc: "台灣傳統音樂典藏・原住民族音樂", url: "https://tmi.openmuseum.tw/objects" },
+                      { name: "PopPiano (繁體中文)", desc: "免費鋼琴樂譜 PDF・港台流行音樂", url: "https://www.poppiano.org/zh/" },
+                    ],
+                  },
+                ] as { region: string; color: string; bg: string; border: string; dbs: { name: string; desc: string; url: string }[] }[]).map((section) => (
+                  <div key={section.region}>
+                    <div
+                      className="text-xs font-bold mb-1.5 uppercase tracking-wider"
+                      style={{ color: section.color, fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px" }}
+                    >
+                      {section.region}
                     </div>
-                    <ExternalLink size={11} className="shrink-0 mt-0.5" style={{ color: "#00d4ff", opacity: 0.7 }} />
-                  </a>
+                    <div className="space-y-1.5">
+                      {section.dbs.map((db) => (
+                        <a
+                          key={db.name}
+                          href={db.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start justify-between gap-2 px-2.5 py-2 rounded transition-all"
+                          style={{ background: section.bg, border: `1px solid ${section.border}` }}
+                          onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.3)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.filter = "brightness(1)"; }}
+                        >
+                          <div className="min-w-0">
+                            <div
+                              className="text-xs font-semibold truncate"
+                              style={{ color: "#1a2744", fontFamily: "'DM Sans', sans-serif" }}
+                            >
+                              {db.name}
+                            </div>
+                            <div
+                              className="mt-0.5 truncate"
+                              style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px" }}
+                            >
+                              {db.desc}
+                            </div>
+                          </div>
+                          <ExternalLink size={11} className="shrink-0 mt-0.5" style={{ color: section.color, opacity: 0.7 }} />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
