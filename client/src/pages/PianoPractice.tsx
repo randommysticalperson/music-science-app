@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLang } from "../contexts/LanguageContext";
+import * as alphaTab from "@coderline/alphatab";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,28 @@ const LANE_COLORS = [
 // ─── Lead-in buffer ──────────────────────────────────────────────────────────
 // After the countdown the highway scrolls empty for this many beats before
 // the first note reaches the hit zone, giving the player time to get ready.
-const LEAD_IN_BEATS = 4;
+const LEAD_IN_OPTIONS = [2, 4, 8] as const;
+type LeadInBeats = typeof LEAD_IN_OPTIONS[number];
+
+// ─── alphaTex for each song (for the Sheet Music practice panel) ─────────────
+const SONG_ALPHATEX: Record<number, string> = {
+  0: `\\title "Ode to Joy" \\tempo 100
+. :4 E5 E5 F5 G5 | G5 F5 E5 D5 | C5 C5 D5 E5 | E5.2 D5.4 D5.2`,
+  1: `\\title "Twinkle Twinkle" \\tempo 110
+. :4 C5 C5 G5 G5 | A5 A5 G5.2 | F5 F5 E5 E5 | D5 D5 C5.2`,
+  2: `\\title "Happy Birthday" \\tempo 100
+. :8 C5 C5 :4 D5 C5 F5 | E5.2 :8 C5 C5 :4 D5 C5 G5 | F5.2`,
+  3: `\\title "C Major Scale" \\tempo 120
+. :4 C5 D5 E5 F5 | G5 A5 B5 C6.2 | B5 A5 G5 F5 | E5 D5 C5.2`,
+  4: `\\title "Fur Elise" \\tempo 90
+. :8 E6 Eb6 E6 Eb6 E6 B5 D6 C6 | A5.4 r8 C4 E4 A4 :4 B4 | r8 E4 Ab4 B4 :4 C5`,
+  5: `\\title "Canon in D" \\tempo 80
+. :4 D5 A4 B4 Gb4 | G4 D4 G4 A4 | D5 A4 B4 Gb4 | G4 Gb4 E4 Gb4`,
+  6: `\\title "Moonlight Sonata" \\tempo 60
+. :8 Ab3 C4 Eb4 Ab3 C4 Eb4 | Ab3 C4 Eb4 Ab3 C4 Eb4 | G3 B3 Eb4 G3 B3 Eb4 | G3 B3 Eb4 G3 B3 Eb4`,
+  7: `\\title "Jingle Bells" \\tempo 130
+. :8 E5 E5 :4 E5 :8 E5 E5 :4 E5 | :8 E5 G5 C5 D5 :2 E5 | :8 F5 F5 F5 F5 :4 F5 :8 E5 E5 | :4 E5 E5 :8 D5 D5 :4 E5 D5 G5`,
+};
 
 // ─── Difficulty ───────────────────────────────────────────────────────────────
 
@@ -197,6 +219,12 @@ export default function PianoPractice() {
   const [countdown,   setCountdown]   = useState(3);
   const [midiConn,    setMidiConn]    = useState(false);
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
+  const [leadIn,      setLeadIn]      = useState<LeadInBeats>(4);
+  const [sheetMode,   setSheetMode]   = useState(false);
+  const [sheetReady,  setSheetReady]  = useState(false);
+  const leadInRef2    = useRef<LeadInBeats>(4);
+  const sheetContRef  = useRef<HTMLDivElement>(null);
+  const atApiRef      = useRef<alphaTab.AlphaTabApi|null>(null);
 
   // Mutable refs
   const gsRef        = useRef<GameState>("idle");
@@ -208,7 +236,7 @@ export default function PianoPractice() {
   const totalRef     = useRef(0);
   const pressedRef   = useRef<Set<number>>(new Set());
   const startTimeRef   = useRef(0);
-  const leadInRef       = useRef(LEAD_IN_BEATS); // beats of lead-in remaining
+  const leadInRef       = useRef<number>(4); // beats of lead-in remaining (mutable)
   const songRef      = useRef<Song>(SONGS[0]);
   const diffRef      = useRef<Difficulty>("normal");
   const noteIdRef    = useRef(0);
@@ -414,13 +442,13 @@ export default function PianoPractice() {
     const now=performance.now();
     const elapsed=(now-startTimeRef.current)/1000;
     const bps=songRef.current.bpm/60;
-    // beat is offset by LEAD_IN_BEATS so notes start arriving after the buffer
-    const beat=elapsed*bps - LEAD_IN_BEATS;
+    // beat is offset by leadIn so notes start arriving after the buffer
+    const beat=elapsed*bps - leadInRef.current;
     const diff=DIFFICULTIES[diffRef.current];
     const visBeats=diff.speed;
 
     // ── Lead-in overlay ──
-    const leadInProgress = Math.max(0, Math.min(1, (LEAD_IN_BEATS + beat) / LEAD_IN_BEATS));
+    const leadInProgress = Math.max(0, Math.min(1, (leadInRef.current + beat) / leadInRef.current));
     if (leadInProgress < 1) {
       // Shrinking progress bar across the top
       const barH = 6;
@@ -438,7 +466,7 @@ export default function PianoPractice() {
       ctx.fillText("GET READY", W / 2, H / 2 - 12);
       ctx.font = "12px 'IBM Plex Mono',monospace";
       ctx.fillStyle = "rgba(0,212,255,0.9)";
-      const beatsLeft = Math.ceil(Math.max(0, -beat));
+      const beatsLeft = Math.ceil(Math.max(0, -beat)); // eslint-disable-line
       ctx.fillText(beatsLeft > 0 ? `${beatsLeft} beat${beatsLeft > 1 ? "s" : ""} to first note` : "Here it comes!", W / 2, H / 2 + 12);
       ctx.globalAlpha = 1;
     }
@@ -520,7 +548,7 @@ export default function PianoPractice() {
   const checkHit=useCallback((midi:number)=>{
     if (gsRef.current!=="playing") return;
     const bps=songRef.current.bpm/60;
-    const beat=((performance.now()-startTimeRef.current)/1000)*bps - LEAD_IN_BEATS;
+    const beat=((performance.now()-startTimeRef.current)/1000)*bps - leadInRef.current;
     const win=DIFFICULTIES[diffRef.current].hitWindow;
     for (const fn of fallingRef.current){
       if (fn.midi!==midi||fn.hit||fn.missed) continue;
@@ -543,7 +571,7 @@ export default function PianoPractice() {
     fallingRef.current=[]; scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
     hitsRef.current=0; totalRef.current=SONGS[songIdx].notes.length;
     noteIdRef.current=0; songRef.current=SONGS[songIdx]; diffRef.current=difficulty;
-    leadInRef.current=LEAD_IN_BEATS;
+    leadInRef.current=leadInRef2.current;
     setScore(0); setCombo(0); setMaxCombo(0); setAccuracy(100);
     gsRef.current="countdown"; setGameState("countdown");
     cdRef.current=3; setCountdown(3);
@@ -676,6 +704,43 @@ export default function PianoPractice() {
 
   useEffect(()=>{ drawPiano(pressedKeys); },[pressedKeys,drawPiano]);
 
+  // ── alphaTab sheet music panel ────────────────────────────────────────────
+  useEffect(()=>{
+    if (!sheetMode||!sheetContRef.current) return;
+    // Destroy previous instance
+    if (atApiRef.current){try{atApiRef.current.destroy();}catch{} atApiRef.current=null;}
+    setSheetReady(false);
+    const settings=new alphaTab.Settings();
+    settings.core.engine="html5";
+    settings.core.logLevel=alphaTab.LogLevel.None;
+    settings.core.fontDirectory="/font/";
+    settings.display.layoutMode=alphaTab.LayoutMode.Horizontal;
+    settings.display.scale=0.85;
+    settings.display.staveProfile=alphaTab.StaveProfile.Score;
+    settings.player.enablePlayer=false;
+    settings.player.enableCursor=false;
+    const api=new alphaTab.AlphaTabApi(sheetContRef.current,settings);
+    atApiRef.current=api;
+    api.renderFinished.on(()=>setSheetReady(true));
+    api.error.on((err:{message?:string})=>{
+      const m=err.message??"";
+      if (m.includes("voices")||m.includes("BoundsLookup")||m.includes("fromJson")) return;
+      console.warn("[atPractice]",m);
+    });
+    const tex=SONG_ALPHATEX[songIdx]??SONG_ALPHATEX[0];
+    api.tex(tex);
+    return ()=>{try{api.destroy();}catch{} atApiRef.current=null;};
+  },[sheetMode,songIdx]);
+
+  // Reload sheet when song changes while sheet mode is on
+  useEffect(()=>{
+    if (!sheetMode||!atApiRef.current) return;
+    setSheetReady(false);
+    const tex=SONG_ALPHATEX[songIdx]??SONG_ALPHATEX[0];
+    atApiRef.current.tex(tex);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[songIdx]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -703,6 +768,33 @@ export default function PianoPractice() {
         >
           {SONGS.map((s,i)=><option key={i} value={i} style={{background:"#1a2744"}}>{s.name}</option>)}
         </select>
+
+        {/* Lead-in selector */}
+        <div className="flex items-center gap-1">
+          <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>LEAD</span>
+          {LEAD_IN_OPTIONS.map(n=>(
+            <button key={n} onClick={()=>{setLeadIn(n);leadInRef2.current=n;}}
+              disabled={gameState==="playing"||gameState==="countdown"}
+              className="text-xs px-1.5 py-0.5 rounded font-bold transition-all"
+              style={{
+                background:leadIn===n?"rgba(0,212,255,0.25)":"rgba(255,255,255,0.05)",
+                border:leadIn===n?"1px solid rgba(0,212,255,0.6)":"1px solid transparent",
+                color:leadIn===n?"#00d4ff":"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",
+              }}
+            >{n}</button>
+          ))}
+        </div>
+
+        {/* Sheet Music mode toggle */}
+        <button
+          onClick={()=>setSheetMode(s=>!s)}
+          className="text-xs px-2 py-1 rounded font-bold transition-all"
+          style={{
+            background:sheetMode?"rgba(168,85,247,0.25)":"rgba(255,255,255,0.05)",
+            border:sheetMode?"1px solid rgba(168,85,247,0.6)":"1px solid rgba(255,255,255,0.12)",
+            color:sheetMode?"#a855f7":"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",
+          }}
+        >🎼 SCORE</button>
 
         {/* Difficulty */}
         <div className="flex gap-1">
@@ -752,6 +844,24 @@ export default function PianoPractice() {
           </div>
         </div>
       </div>
+
+      {/* Sheet Music panel — shown above highway when sheetMode is on */}
+      {sheetMode&&(
+        <div className="flex-shrink-0 relative overflow-x-auto"
+          style={{height:180,borderBottom:"1px solid rgba(168,85,247,0.3)",background:"#f8f6f2"}}>
+          {!sheetReady&&(
+            <div className="absolute inset-0 flex items-center justify-center"
+              style={{background:"#f8f6f2",zIndex:10}}>
+              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>Loading score…</span>
+            </div>
+          )}
+          <div ref={sheetContRef} className="w-full h-full" style={{minWidth:"100%"}} />
+          <div className="absolute top-1 left-2 text-xs font-bold px-1.5 py-0.5 rounded"
+            style={{background:"rgba(168,85,247,0.15)",border:"1px solid rgba(168,85,247,0.4)",color:"#7c3aed",fontFamily:"'IBM Plex Mono',monospace",pointerEvents:"none"}}>
+            🎼 SCORE — {SONGS[songIdx].name}
+          </div>
+        </div>
+      )}
 
       {/* Highway — full width, DFT baked into background */}
       <div className="flex flex-col flex-1 min-h-0">
