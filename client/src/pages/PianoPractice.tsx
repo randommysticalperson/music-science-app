@@ -38,6 +38,9 @@ const LANE_COLORS = [
 ];
 // DFT energy per MIDI key — filled each rAF frame, read by drawPiano
 const dftKeyEnergy = new Float32Array(128); // index = midi number, value 0–1
+// DFT peak-hold per MIDI key — decays slowly
+const dftPeakHold  = new Float32Array(128);
+const PEAK_DECAY   = 0.008; // per frame
 
 // ─── Lead-in buffer ──────────────────────────────────────────────────────────
 // After the countdown the highway scrolls empty for this many beats before
@@ -167,18 +170,21 @@ interface FallingNote {
 
 interface KeyRect { x:number; y:number; w:number; h:number; isBlack:boolean; }
 
-// ─── Piano layout ─────────────────────────────────────────────────────────────
-
-function buildPianoLayout(W:number, H:number): Map<number,KeyRect> {
-  const whiteW = W / WHITE_COUNT;
+// ─── Piano layout ─────────────────────────────────────────────────────
+// Build layout for a given MIDI range (viewStart–viewEnd)
+function buildPianoLayout(W:number, H:number, vStart=KEYBOARD_START, vEnd=KEYBOARD_END): Map<number,KeyRect> {
+  const visibleMidis = Array.from({length:vEnd-vStart+1},(_,i)=>vStart+i);
+  const visibleWhites = visibleMidis.filter(m=>!isBlack(m));
+  const wCount = visibleWhites.length || 1;
+  const whiteW = W / wCount;
   const blackW = whiteW * 0.58;
   const blackH = H * 0.62;
   const rects  = new Map<number,KeyRect>();
   let wi = 0;
-  for (const m of ALL_MIDIS) {
+  for (const m of visibleMidis) {
     if (!isBlack(m)) { rects.set(m,{x:wi*whiteW,y:0,w:whiteW,h:H,isBlack:false}); wi++; }
   }
-  for (const m of ALL_MIDIS) {
+  for (const m of visibleMidis) {
     if (isBlack(m)) {
       const left = rects.get(m-1);
       if (left) rects.set(m,{x:left.x+left.w-blackW/2,y:0,w:blackW,h:blackH,isBlack:true});
@@ -222,6 +228,11 @@ export default function PianoPractice() {
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
   const [tempoScale,  setTempoScale]  = useState(100); // 50–100%
   const tempoScaleRef = useRef(1.0);  // mutable copy for rAF closure
+  // Viewport zoom: which MIDI range is visible (default: full 88 keys)
+  const [viewStart, setViewStart] = useState(KEYBOARD_START); // A0
+  const [viewEnd,   setViewEnd]   = useState(KEYBOARD_END);   // C8
+  const viewStartRef = useRef(KEYBOARD_START);
+  const viewEndRef   = useRef(KEYBOARD_END);
   const [leadIn,      setLeadIn]      = useState<LeadInBeats>(4);
   // Score panel is always visible — no toggle needed
   const [sheetReady,  setSheetReady]  = useState(false);
@@ -379,11 +390,27 @@ export default function PianoPractice() {
     ctx.clearRect(0,0,W,H);
 
     // 1. Background
-    ctx.fillStyle="#0a0f1e"; ctx.fillRect(0,0,W,H);
-
+      ctx.fillStyle="#0a0f1e"; ctx.fillRect(0,0,W,H);
     const layout=layoutRef.current;
     if (layout.size===0){rafHw.current=requestAnimationFrame(drawHighway);return;}
-
+    // 1b. Octave highlight bands — alternating subtle tint every 12 semitones
+    {
+      let octBand=0;
+      let prevX=0;
+      let prevOct=-1;
+      layout.forEach((r,midi)=>{
+        if (r.isBlack) return;
+        const oct=Math.floor(midi/12);
+        if (prevOct!==-1 && oct!==prevOct){
+          if (octBand%2===0) { ctx.fillStyle="rgba(255,255,255,0.018)"; ctx.fillRect(prevX,0,r.x-prevX,H); }
+          octBand++; prevX=r.x;
+        }
+        if (prevOct===-1) prevX=r.x;
+        prevOct=oct;
+      });
+      // fill last band
+      if (octBand%2===0) { ctx.fillStyle="rgba(255,255,255,0.018)"; ctx.fillRect(prevX,0,W-prevX,H); }
+    }
        // Notes rise from bottom → hit zone near top
     const HIT_Y=H*0.12;
     const TRAVEL=H-HIT_Y; // total travel distance (bottom to hit zone)
@@ -418,6 +445,18 @@ export default function PianoPractice() {
         g.addColorStop(1,col+"00");
         ctx.fillStyle=g;
         ctx.fillRect(x,HIT_Y,bW,bH);
+      });
+      // Peak-hold: update and draw thin white lines
+      layout.forEach((r,midi)=>{
+        const v=dftKeyEnergy[midi]||0;
+        if (v>dftPeakHold[midi]) dftPeakHold[midi]=v;
+        else dftPeakHold[midi]=Math.max(0,dftPeakHold[midi]-PEAK_DECAY);
+        const ph=dftPeakHold[midi];
+        if (ph>0.04){
+          const peakY=HIT_Y+ph*TRAVEL*0.85;
+          ctx.strokeStyle="rgba(255,255,255,0.55)"; ctx.lineWidth=1;
+          ctx.beginPath(); ctx.moveTo(r.x,peakY); ctx.lineTo(r.x+r.w,peakY); ctx.stroke();
+        }
       });
     }
     // 3. Lane dividers (white key boundaries)
@@ -798,7 +837,7 @@ export default function PianoPractice() {
     };
     setSize(hwRef.current); setSize(pianoRef.current);
     const p=pianoRef.current;
-    if (p) layoutRef.current=buildPianoLayout(p.width/(window.devicePixelRatio||1),p.height/(window.devicePixelRatio||1));
+    if (p) layoutRef.current=buildPianoLayout(p.width/(window.devicePixelRatio||1),p.height/(window.devicePixelRatio||1),viewStartRef.current,viewEndRef.current);
   },[]);
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -986,6 +1025,36 @@ export default function PianoPractice() {
               ACC {accuracy}% · MAX ×{maxCombo} · BPM {Math.round(SONGS[songIdx].bpm*tempoScale/100)}
               {!audioReady&&" · Click to unlock audio"}
             </span>
+            {/* Zoom / octave range */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>ZOOM</span>
+              {[
+                {label:"ALL",  s:KEYBOARD_START, e:KEYBOARD_END},
+                {label:"C2–C5",s:36,  e:72},
+                {label:"C3–C6",s:48,  e:84},
+                {label:"C4–C7",s:60,  e:96},
+              ].map(z=>(
+                <button key={z.label}
+                  onClick={()=>{
+                    viewStartRef.current=z.s; viewEndRef.current=z.e;
+                    setViewStart(z.s); setViewEnd(z.e);
+                    // Rebuild layout immediately
+                    const p=pianoRef.current;
+                    if (p) layoutRef.current=buildPianoLayout(p.offsetWidth,p.offsetHeight,z.s,z.e);
+                    const h=hwRef.current;
+                    if (h) layoutRef.current=buildPianoLayout(h.offsetWidth,h.offsetHeight,z.s,z.e);
+                  }}
+                  className="px-1.5 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    fontFamily:"'IBM Plex Mono',monospace",fontSize:8,
+                    background:viewStart===z.s&&viewEnd===z.e?"rgba(0,212,255,0.2)":"rgba(255,255,255,0.05)",
+                    border:`1px solid ${viewStart===z.s&&viewEnd===z.e?"rgba(0,212,255,0.5)":"rgba(255,255,255,0.1)"}`,
+                    color:viewStart===z.s&&viewEnd===z.e?"#00d4ff":"#8a9bb0",
+                  }}>
+                  {z.label}
+                </button>
+              ))}
+            </div>
             {/* Tempo slider */}
             <div className="flex items-center gap-1.5">
               <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>TEMPO</span>

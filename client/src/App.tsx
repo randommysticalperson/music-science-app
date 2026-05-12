@@ -16,6 +16,7 @@ import Acoustics from "./pages/Acoustics";
 import Sequencer from "./pages/Sequencer";
 import SheetMusic from "./pages/SheetMusic";
 import PianoPractice from "./pages/PianoPractice";
+import ContinuousPiano from "./pages/ContinuousPiano";
 import Layout from "./components/Layout";
 
 function Router() {
@@ -29,6 +30,7 @@ function Router() {
         <Route path="/sequencer" component={Sequencer} />
         <Route path="/sheet-music" component={SheetMusic} />
         <Route path="/piano-practice" component={PianoPractice} />
+        <Route path="/continuous-piano" component={ContinuousPiano} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
