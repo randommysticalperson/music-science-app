@@ -223,6 +223,8 @@ export default function PianoPractice() {
   const [countdown,   setCountdown]   = useState(3);
   const [midiConn,    setMidiConn]    = useState(false);
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
+  const [tempoScale,  setTempoScale]  = useState(100); // 50–100%
+  const tempoScaleRef = useRef(1.0);  // mutable copy for rAF closure
   const [leadIn,      setLeadIn]      = useState<LeadInBeats>(4);
   // Score panel is always visible — no toggle needed
   const [sheetReady,  setSheetReady]  = useState(false);
@@ -408,7 +410,31 @@ export default function PianoPractice() {
       }
     });
 
-    // 4. Hit zone glow line (near top)
+    // 4a. Oscilloscope waveform drawn along the hit-zone line
+    if (analyserRef.current) {
+      const analyser=analyserRef.current;
+      const bufLen=analyser.fftSize;
+      const timeData=new Uint8Array(bufLen);
+      analyser.getByteTimeDomainData(timeData);
+      ctx.save();
+      ctx.beginPath();
+      const sliceW=W/bufLen;
+      let x0=0;
+      for (let i=0;i<bufLen;i++){
+        const v=(timeData[i]/128.0)-1; // -1..1
+        const y=HIT_Y+v*18; // ±18px around hit line
+        if (i===0) ctx.moveTo(x0,y); else ctx.lineTo(x0,y);
+        x0+=sliceW;
+      }
+      ctx.strokeStyle="rgba(0,212,255,0.55)";
+      ctx.lineWidth=1.5;
+      ctx.shadowColor="#00d4ff";
+      ctx.shadowBlur=6;
+      ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.restore();
+    }
+    // 4b. Hit zone glow line (near top)
     const hg=ctx.createLinearGradient(0,HIT_Y-3,0,HIT_Y+3);
     hg.addColorStop(0,"rgba(236,72,153,0)");
     hg.addColorStop(0.5,"rgba(236,72,153,0.9)");
@@ -463,7 +489,7 @@ export default function PianoPractice() {
     // ── Playing ──
     const now=performance.now();
     const elapsed=(now-startTimeRef.current)/1000;
-    const bps=songRef.current.bpm/60;
+    const bps=(songRef.current.bpm/60)*tempoScaleRef.current;
     // beat is offset by leadIn so notes start arriving after the buffer
     const beat=elapsed*bps - leadInRef.current;
 
@@ -535,9 +561,16 @@ export default function PianoPractice() {
         continue;
       }
 
+      // Note trail glow — fading streak above the note (in the direction of travel = upward)
+      const trailH=Math.min(noteH*1.2,40);
+      const tg=ctx.createLinearGradient(x,yTop-trailH,x,yTop);
+      tg.addColorStop(0,`${col}00`); tg.addColorStop(1,`${col}44`);
+      ctx.fillStyle=tg;
+      ctx.fillRect(x+1,yTop-trailH,w-2,trailH);
+      // Note block
       const ng=ctx.createLinearGradient(x,yTop,x,yTop+noteH);
       ng.addColorStop(0,`${col}ee`); ng.addColorStop(1,`${col}77`);
-      ctx.fillStyle=ng; ctx.shadowColor=col; ctx.shadowBlur=8;
+      ctx.fillStyle=ng; ctx.shadowColor=col; ctx.shadowBlur=10;
       ctx.beginPath();ctx.roundRect(x+1,yTop,w-2,noteH,4);ctx.fill();
       ctx.strokeStyle=col; ctx.lineWidth=1.5;
       ctx.beginPath();ctx.roundRect(x+1,yTop,w-2,noteH,4);ctx.stroke();
@@ -632,13 +665,16 @@ export default function PianoPractice() {
     playNote(midi); checkHit(midi);
     pressedRef.current=new Set(Array.from(pressedRef.current).concat(midi));
     setPressedKeys(new Set(pressedRef.current));
-  },[initAudio,playNote,checkHit]);
-
+    // Immediately redraw piano so key lights up without waiting for React state cycle
+    drawPiano(pressedRef.current);
+  },[initAudio,playNote,checkHit,drawPiano]);
   const releaseKey=useCallback((midi:number)=>{
     stopNote(midi);
     pressedRef.current=new Set(Array.from(pressedRef.current).filter(m=>m!==midi));
     setPressedKeys(new Set(pressedRef.current));
-  },[stopNote]);
+    // Immediately redraw piano so key un-lights without waiting for React state cycle
+    drawPiano(pressedRef.current);
+  },[stopNote,drawPiano]);;
 
   const onKeyDown=useCallback((e:KeyboardEvent)=>{
     if (e.repeat) return;
@@ -903,12 +939,55 @@ export default function PianoPractice() {
           <span className="text-xs font-semibold" style={{color:"#ec4899",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.08em"}}>
             NOTE HIGHWAY — {SONGS[songIdx].name.toUpperCase()}
           </span>
-          <span className="text-xs" style={{color:"rgba(138,155,176,0.5)",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>
-            ACC {accuracy}% · MAX ×{maxCombo} · BPM {SONGS[songIdx].bpm}
-            {!audioReady&&" · Click to unlock audio"}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs" style={{color:"rgba(138,155,176,0.5)",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>
+              ACC {accuracy}% · MAX ×{maxCombo} · BPM {Math.round(SONGS[songIdx].bpm*tempoScale/100)}
+              {!audioReady&&" · Click to unlock audio"}
+            </span>
+            {/* Tempo slider */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>TEMPO</span>
+              <input type="range" min={50} max={100} step={5} value={tempoScale}
+                disabled={gameState==="playing"||gameState==="countdown"}
+                onChange={e=>{
+                  const v=Number(e.target.value);
+                  setTempoScale(v); tempoScaleRef.current=v/100;
+                }}
+                style={{width:64,accentColor:"#00d4ff",cursor:"pointer"}}
+              />
+              <span className="text-xs font-bold" style={{color:"#00d4ff",fontFamily:"'IBM Plex Mono',monospace",fontSize:9,minWidth:28}}>{tempoScale}%</span>
+            </div>
+          </div>
         </div>
-        <canvas ref={hwRef} className="flex-1 w-full" style={{display:"block"}} />
+        <div className="flex-1 relative min-h-0">
+          <canvas ref={hwRef} className="w-full h-full" style={{display:"block"}} />
+          {/* Results overlay */}
+          {gameState==="finished"&&(
+            <div className="absolute inset-0 flex flex-col items-center justify-center"
+              style={{background:"rgba(10,15,30,0.88)",backdropFilter:"blur(4px)"}}>
+              <div className="text-center px-8 py-6 rounded-xl"
+                style={{background:"rgba(15,20,40,0.95)",border:"1px solid rgba(236,72,153,0.4)",boxShadow:"0 0 40px rgba(236,72,153,0.2)"}}>
+                <div className="text-4xl font-black mb-1" style={{color:"#ec4899",fontFamily:"'DM Sans',sans-serif"}}>
+                  {accuracy>=95?"S":accuracy>=80?"A":accuracy>=60?"B":"C"}
+                </div>
+                <div className="text-xs mb-4" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>GRADE</div>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs mb-5" style={{fontFamily:"'IBM Plex Mono',monospace"}}>
+                  <span style={{color:"#8a9bb0"}}>ACCURACY</span>
+                  <span className="font-bold" style={{color:"#00d4ff"}}>{accuracy}%</span>
+                  <span style={{color:"#8a9bb0"}}>SCORE</span>
+                  <span className="font-bold" style={{color:"#ec4899"}}>{score.toLocaleString()}</span>
+                  <span style={{color:"#8a9bb0"}}>MAX COMBO</span>
+                  <span className="font-bold" style={{color:"#eab308"}}>×{maxCombo}</span>
+                </div>
+                <button onClick={startGame}
+                  className="px-6 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-90"
+                  style={{background:"#ec4899",color:"white",fontFamily:"'IBM Plex Mono',monospace"}}>
+                  PLAY AGAIN
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Piano keyboard */}
