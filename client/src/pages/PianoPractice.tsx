@@ -440,18 +440,40 @@ export default function PianoPractice() {
     hg.addColorStop(0.5,"rgba(236,72,153,0.9)");
     hg.addColorStop(1,"rgba(236,72,153,0)");
     ctx.fillStyle=hg; ctx.fillRect(0,HIT_Y-3,W,6);
-    // Hit zone circles (at top)
-    layout.forEach((r,midi)=>{
+    // Hit zone circles — animated longitudinal wave rippling across lanes
+    const waveT=performance.now()/1000; // seconds
+    const laneKeys=Array.from(layout.keys()); // sorted midi numbers
+    laneKeys.forEach((midi,laneIdx)=>{
+      const r=layout.get(midi)!;
       const col=LANE_COLORS[midi%12];
       const cx=r.x+r.w/2, rad=r.w*(r.isBlack?0.35:0.38);
       const on=pressedRef.current.has(midi);
-      ctx.beginPath();ctx.arc(cx,HIT_Y,rad,0,Math.PI*2);
+      // Longitudinal wave: each lane's circle bobs vertically
+      // amplitude 7px idle, 3px when pressed; wave travels left→right
+      const amp=on?3:7;
+      const waveFreq=0.9;   // cycles per second
+      const waveLen=0.18;   // fraction of total lanes per cycle (spatial frequency)
+      const phase=laneIdx*waveLen*Math.PI*2 - waveT*waveFreq*Math.PI*2;
+      const dy=amp*Math.sin(phase);
+      const cy=HIT_Y+dy;
+      // Glow ring grows with wave peak
+      const glowR=rad+(Math.abs(dy)/amp)*4;
+      if (!on){
+        ctx.save();
+        ctx.shadowColor=col; ctx.shadowBlur=6+Math.abs(dy)*1.2;
+        ctx.beginPath();ctx.arc(cx,cy,glowR,0,Math.PI*2);
+        ctx.strokeStyle=`${col}44`; ctx.lineWidth=1; ctx.stroke();
+        ctx.restore();
+      }
+      ctx.beginPath();ctx.arc(cx,cy,rad,0,Math.PI*2);
       ctx.fillStyle=on?col:`${col}28`; ctx.fill();
-      ctx.strokeStyle=on?col:`${col}55`; ctx.lineWidth=on?2:1; ctx.stroke();
+      ctx.strokeStyle=on?col:`${col}66`; ctx.lineWidth=on?2:1;
+      if (on){ctx.shadowColor=col;ctx.shadowBlur=14;}
+      ctx.stroke(); ctx.shadowBlur=0;
       if (!r.isBlack&&r.w>14){
         ctx.fillStyle=on?"white":`${col}80`;
         ctx.font=`bold ${Math.min(9,r.w*0.28)}px 'IBM Plex Mono',monospace`;
-        ctx.textAlign="center"; ctx.fillText(noteLabel(midi),cx,HIT_Y-4);
+        ctx.textAlign="center"; ctx.fillText(noteLabel(midi),cx,cy-rad-2);
       }
     });
 
