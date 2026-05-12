@@ -191,6 +191,11 @@ export default function SheetMusic() {
   const [isLooping, setIsLooping] = useState(false);
   const [showDatabases, setShowDatabases] = useState(false);
   const [dbSearch, setDbSearch] = useState("");
+  // ─── Metronome state ─────────────────────────────────────────────────────────
+  const [metroBeat, setMetroBeat] = useState(0);      // increments each beat
+  const [metroFlash, setMetroFlash] = useState(false); // true for ~120 ms on each beat
+  const lastBeatRef = useRef(-1);                      // last beat index we fired on
+  const metroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Read URL params (e.g. ?tex=... from Music Theory) ─────────────────────
   useEffect(() => {
@@ -270,10 +275,21 @@ export default function SheetMusic() {
     api.playerPositionChanged.on((args: alphaTab.synth.PositionChangedEventArgs) => {
       setCurrentTime(args.currentTime);
       setTotalTime(args.endTime);
+      // ── Beat detection: fire on each new beat index ──────────────────────────
+      const beat = (args as unknown as { currentBeat?: number }).currentBeat ?? Math.floor((args.currentTime / 60000) * 120);
+      if (beat !== lastBeatRef.current) {
+        lastBeatRef.current = beat;
+        setMetroBeat((b) => b + 1);
+        setMetroFlash(true);
+        if (metroTimerRef.current) clearTimeout(metroTimerRef.current);
+        metroTimerRef.current = setTimeout(() => setMetroFlash(false), 120);
+      }
     });
     api.playerFinished.on(() => {
       setPlaybackState("stopped");
       setCurrentTime(0);
+      setMetroFlash(false);
+      lastBeatRef.current = -1;
     });
     api.error.on((err: { message?: string; type?: string }) => {
       const msg = err.message ?? String(err);
@@ -1014,6 +1030,23 @@ export default function SheetMusic() {
             />
           </div>
 
+          {/* ── Metronome overlay flash ── */}
+          {playbackState === "playing" && (
+            <div
+              key={metroBeat}
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                zIndex: 10,
+                background: metroFlash
+                  ? "rgba(0, 212, 255, 0.07)"
+                  : "transparent",
+                transition: metroFlash ? "none" : "background 0.12s ease-out",
+                borderRadius: "inherit",
+              }}
+            />
+          )}
           {/* ── Playback controls bar ── */}
           <div
             className="px-6 py-4 space-y-3"
@@ -1133,6 +1166,61 @@ export default function SheetMusic() {
                 </span>
               </div>
 
+              {/* Metronome indicator */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+                title="Visual metronome — flashes on each beat during playback"
+              >
+                {/* Pendulum icon */}
+                <svg
+                  width="18" height="18" viewBox="0 0 18 18" fill="none"
+                  style={{ opacity: playbackState === "playing" ? 1 : 0.35 }}
+                >
+                  <circle cx="9" cy="14" r="2.5"
+                    fill={metroFlash && playbackState === "playing" ? "#00d4ff" : "#4a5568"}
+                    style={{ transition: "fill 0.05s" }}
+                  />
+                  <line x1="9" y1="2" x2="9" y2="12"
+                    stroke={metroFlash && playbackState === "playing" ? "#00d4ff" : "#4a5568"}
+                    strokeWidth="1.5" strokeLinecap="round"
+                    style={{
+                      transformOrigin: "9px 14px",
+                      transform: playbackState === "playing"
+                        ? (metroBeat % 2 === 0 ? "rotate(-22deg)" : "rotate(22deg)")
+                        : "rotate(0deg)",
+                      transition: playbackState === "playing" ? "transform 0.12s ease-in-out" : "none",
+                    }}
+                  />
+                </svg>
+                {/* Beat dot row */}
+                <div style={{ display: "flex", gap: "3px", alignItems: "center" }}>
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: i === 0 ? "8px" : "5px",
+                        height: i === 0 ? "8px" : "5px",
+                        borderRadius: "50%",
+                        background:
+                          playbackState === "playing" && metroFlash && (metroBeat % 4) === i
+                            ? i === 0 ? "#00d4ff" : "#7c3aed"
+                            : "rgba(255,255,255,0.12)",
+                        transition: "background 0.05s",
+                        boxShadow:
+                          playbackState === "playing" && metroFlash && (metroBeat % 4) === i
+                            ? i === 0
+                              ? "0 0 6px rgba(0,212,255,0.8)"
+                              : "0 0 4px rgba(124,58,237,0.8)"
+                            : "none",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
               {/* Loop toggle */}
               <button
                 onClick={handleLoopToggle}
