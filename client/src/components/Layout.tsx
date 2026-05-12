@@ -4,7 +4,7 @@
  * Persistent left nav with module icons + EN/繁體中文 language toggle
  */
 import { Link, useLocation } from "wouter";
-import { Music, Activity, Waves, Home, Menu, X, Github, ListMusic, Languages, BookOpen } from "lucide-react";
+import { Music, Activity, Waves, Home, Menu, X, Github, ListMusic, Languages, BookOpen, Piano } from "lucide-react";
 import { useState } from "react";
 import { useLang } from "../contexts/LanguageContext";
 
@@ -20,6 +20,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { path: "/acoustics", label: t("acoustics"), icon: Waves, accent: "#a78bfa" },
     { path: "/sequencer", label: t("sequencer"), icon: ListMusic, accent: "#4ade80" },
     { path: "/sheet-music", label: t("sheetMusicNav"), icon: BookOpen, accent: "#f59e0b" },
+    { path: "/piano-practice", label: t("pianoPracticeNav"), icon: Piano, accent: "#ec4899" },
   ];
 
   return (

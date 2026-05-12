@@ -212,6 +212,9 @@ export const translations = {
     sheetMusicDropFile: "Drop or click to upload",
     sheetMusicZoom: "ZOOM",
     sheetMusicNav: "Sheet Music",
+    pianoPracticeNav: "Piano Practice",
+    pianoPracticeTitle: "Piano Practice",
+    pianoPracticeSubtitle: "Virtual keyboard · Falling-note game · Real-time DFT spectrum",
   },
 
   zh: {
@@ -417,6 +420,9 @@ export const translations = {
     sheetMusicDropFile: "拖放或點擊上傳",
     sheetMusicZoom: "縮放",
     sheetMusicNav: "樂譜",
+    pianoPracticeNav: "鋼琴練習",
+    pianoPracticeTitle: "鋼琴練習",
+    pianoPracticeSubtitle: "虛擬鍵盤 · 落音遊戲 · 即時 DFT 頻譜",
   },
 
   ja: {
@@ -622,6 +628,9 @@ export const translations = {
     sheetMusicDropFile: "ドロップまたはクリックしてアップロード",
     sheetMusicZoom: "ズーム",
     sheetMusicNav: "楽譜",
+    pianoPracticeNav: "ピアノ練習",
+    pianoPracticeTitle: "ピアノ練習",
+    pianoPracticeSubtitle: "バーチャルキーボード · 落下音ゲーム · リアルタイム DFT スペクトル",
   },
 } as const;
 
