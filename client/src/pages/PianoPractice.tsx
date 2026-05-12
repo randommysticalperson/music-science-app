@@ -32,6 +32,10 @@ const KEY_MAP: Record<string, number> = {
   i:72,"9":73,o:74,"0":75,p:76,
 };
 
+// Reverse map: MIDI number → keyboard label (uppercase for display)
+const MIDI_KEY_LABEL: Record<number, string> = {};
+Object.entries(KEY_MAP).forEach(([k, m]) => { MIDI_KEY_LABEL[m] = k.toUpperCase(); });
+
 const LANE_COLORS = [
   "#ec4899","#f97316","#eab308","#22c55e",
   "#00d4ff","#a855f7","#ec4899","#f97316",
@@ -221,10 +225,13 @@ export default function PianoPractice() {
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
   const [leadIn,      setLeadIn]      = useState<LeadInBeats>(4);
   const [sheetMode,   setSheetMode]   = useState(false);
+  // keep sheetModeRef in sync so rAF closure can read it
+  useEffect(()=>{ sheetModeRef.current=sheetMode; },[sheetMode]);
   const [sheetReady,  setSheetReady]  = useState(false);
   const leadInRef2    = useRef<LeadInBeats>(4);
   const sheetContRef  = useRef<HTMLDivElement>(null);
   const atApiRef      = useRef<alphaTab.AlphaTabApi|null>(null);
+  const sheetModeRef  = useRef(false);
 
   // Mutable refs
   const gsRef        = useRef<GameState>("idle");
@@ -300,9 +307,23 @@ export default function PianoPractice() {
       ctx.strokeStyle=on?col:"rgba(0,0,0,0.15)"; ctx.lineWidth=on?1.5:1;
       ctx.beginPath();ctx.roundRect(r.x+1,0,r.w-2,r.h-2,[0,0,4,4]);ctx.stroke();
       if (r.w>16){
+        // Note name label
         ctx.fillStyle=on?"white":"rgba(0,0,0,0.3)";
         ctx.font=`bold ${Math.min(10,r.w*0.32)}px 'IBM Plex Mono',monospace`;
         ctx.textAlign="center"; ctx.fillText(noteLabel(midi),r.x+r.w/2,r.h-5);
+        // QWERTY key label
+        const kl=MIDI_KEY_LABEL[midi];
+        if (kl && r.w>18){
+          const fontSize=Math.min(9,r.w*0.28);
+          ctx.font=`${fontSize}px 'IBM Plex Mono',monospace`;
+          ctx.fillStyle=on?"rgba(255,255,255,0.9)":"rgba(0,0,0,0.45)";
+          // Draw a small rounded badge
+          const bw=r.w*0.55, bh=fontSize+3, bx=r.x+r.w/2-bw/2, by=r.h-22;
+          ctx.fillStyle=on?"rgba(0,0,0,0.3)":"rgba(0,0,0,0.08)";
+          ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,[2]); ctx.fill();
+          ctx.fillStyle=on?"rgba(255,255,255,0.95)":"rgba(0,0,0,0.5)";
+          ctx.textAlign="center"; ctx.fillText(kl,r.x+r.w/2,by+bh-2);
+        }
       }
     });
     // Black keys
@@ -317,6 +338,15 @@ export default function PianoPractice() {
       if (on){
         ctx.strokeStyle=col;ctx.lineWidth=1.5;
         ctx.beginPath();ctx.roundRect(r.x,0,r.w,r.h,[0,0,3,3]);ctx.stroke();
+      }
+      // QWERTY label on black key
+      const kl=MIDI_KEY_LABEL[midi];
+      if (kl && r.w>10){
+        const fontSize=Math.min(7,r.w*0.45);
+        ctx.font=`${fontSize}px 'IBM Plex Mono',monospace`;
+        ctx.fillStyle=on?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.35)";
+        ctx.textAlign="center";
+        ctx.fillText(kl,r.x+r.w/2,r.h-4);
       }
     });
   },[]);
@@ -444,6 +474,20 @@ export default function PianoPractice() {
     const bps=songRef.current.bpm/60;
     // beat is offset by leadIn so notes start arriving after the buffer
     const beat=elapsed*bps - leadInRef.current;
+
+    // ── Sync alphaTab cursor to game clock ──
+    // Only drive the cursor when the score panel is visible and the score is loaded.
+    // We compute song time in ms (clamped to 0) and set tickPosition so the
+    // alphaTab animated cursor scrolls in sync with the falling notes.
+    if (sheetModeRef.current && atApiRef.current) {
+      try {
+        const songMs = Math.max(0, elapsed - (leadInRef.current / bps)) * 1000;
+        const api = atApiRef.current as alphaTab.AlphaTabApi & { timePosition?: number };
+        if (typeof api.timePosition === "number") {
+          api.timePosition = songMs;
+        }
+      } catch { /* ignore if score not yet loaded */ }
+    }
     const diff=DIFFICULTIES[diffRef.current];
     const visBeats=diff.speed;
 
@@ -717,8 +761,10 @@ export default function PianoPractice() {
     settings.display.layoutMode=alphaTab.LayoutMode.Horizontal;
     settings.display.scale=0.85;
     settings.display.staveProfile=alphaTab.StaveProfile.Score;
-    settings.player.enablePlayer=false;
-    settings.player.enableCursor=false;
+    settings.player.enablePlayer=true;
+    settings.player.enableCursor=true;
+    settings.player.enableAnimatedBeatCursor=true;
+    settings.player.soundFont="/soundfont/sonivox.sf2";
     const api=new alphaTab.AlphaTabApi(sheetContRef.current,settings);
     atApiRef.current=api;
     api.renderFinished.on(()=>setSheetReady(true));
@@ -879,7 +925,7 @@ export default function PianoPractice() {
       </div>
 
       {/* Piano keyboard */}
-      <div className="flex-shrink-0" style={{height:110,borderTop:"2px solid rgba(236,72,153,0.3)",background:"#0d1526"}}>
+      <div className="flex-shrink-0" style={{height:140,borderTop:"2px solid rgba(236,72,153,0.3)",background:"#0d1526"}}>
         <canvas
           ref={pianoRef} className="w-full h-full"
           style={{display:"block",cursor:"pointer"}}
