@@ -1,8 +1,8 @@
 /*
  * PianoPractice.tsx — Bauhaus Frequency Design
- * Virtual piano keyboard + real-time DFT spectrum + falling-note highway game
+ * Virtual piano keyboard + real-time DFT spectrum + full-keyboard falling-note highway
  * Design: dark navy (#0a0f1e) background, accent pink (#ec4899), cyan (#00d4ff)
- * Layout: top DFT spectrum canvas | middle falling-note highway canvas | bottom piano keyboard
+ * Highway: one lane per piano key (C3–B5), aligned with the keyboard below
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLang } from "../contexts/LanguageContext";
@@ -10,133 +10,165 @@ import { useLang } from "../contexts/LanguageContext";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const BLACK_OFFSETS = [1, 3, 6, 8, 10]; // semitone positions that are black keys
+const BLACK_SEMITONES = new Set([1, 3, 6, 8, 10]);
 
-// Keyboard spans C3 (MIDI 48) to B5 (MIDI 83) = 3 octaves = 36 keys
-const KEYBOARD_START_MIDI = 48; // C3
-const KEYBOARD_END_MIDI = 83;   // B5
-const TOTAL_KEYS = KEYBOARD_END_MIDI - KEYBOARD_START_MIDI + 1;
+const KEYBOARD_START = 48; // C3
+const KEYBOARD_END   = 83; // B5
+const TOTAL_KEYS     = KEYBOARD_END - KEYBOARD_START + 1; // 36
 
-// Count white keys
-function isBlackKey(midi: number) {
-  return BLACK_OFFSETS.includes(midi % 12);
-}
-const WHITE_KEY_MIDIS = Array.from({ length: TOTAL_KEYS }, (_, i) => KEYBOARD_START_MIDI + i)
-  .filter((m) => !isBlackKey(m));
-const WHITE_KEY_COUNT = WHITE_KEY_MIDIS.length;
+function isBlack(midi: number) { return BLACK_SEMITONES.has(midi % 12); }
 
-// Note frequency (equal temperament, A4 = 440 Hz)
-const noteFreq = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
+const ALL_MIDIS   = Array.from({ length: TOTAL_KEYS }, (_, i) => KEYBOARD_START + i);
+const WHITE_MIDIS = ALL_MIDIS.filter(m => !isBlack(m));
+const WHITE_COUNT = WHITE_MIDIS.length; // 21
 
-// Note label: e.g. "C4", "F#5"
-const noteLabel = (midi: number) => NOTE_NAMES[midi % 12] + Math.floor(midi / 12 - 1);
+const noteFreq  = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
+const noteLabel = (midi: number) => NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
 
-// Keyboard key → MIDI mapping (QWERTY)
+// QWERTY → MIDI
 const KEY_MAP: Record<string, number> = {
-  // Octave 3 (C3–B3): Z row
-  z: 48, s: 49, x: 50, d: 51, c: 52, v: 53, g: 54, b: 55, h: 56, n: 57, j: 58, m: 59,
-  // Octave 4 (C4–B4): Q row
-  q: 60, "2": 61, w: 62, "3": 63, e: 64, r: 65, "5": 66, t: 67, "6": 68, y: 69, "7": 70, u: 71,
-  // Octave 5 (C5–B5): I row
-  i: 72, "9": 73, o: 74, "0": 75, p: 76,
+  z:48, s:49, x:50, d:51, c:52, v:53, g:54, b:55, h:56, n:57, j:58, m:59,
+  q:60, "2":61, w:62, "3":63, e:64, r:65, "5":66, t:67, "6":68, y:69, "7":70, u:71,
+  i:72, "9":73, o:74, "0":75, p:76,
 };
 
-// ─── Song Patterns ────────────────────────────────────────────────────────────
+// Lane colour per semitone (12 colours cycling)
+const LANE_COLORS = [
+  "#ec4899","#f97316","#eab308","#22c55e",
+  "#00d4ff","#a855f7","#ec4899","#f97316",
+  "#eab308","#22c55e","#00d4ff","#a855f7",
+];
 
-interface SongNote {
-  midi: number;
-  beat: number;    // beat index (0-based)
-  duration: number; // in beats
-}
+// ─── Difficulty ───────────────────────────────────────────────────────────────
 
-interface Song {
-  name: string;
-  bpm: number;
-  notes: SongNote[];
-}
+const DIFFICULTIES = {
+  easy:   { label: "EASY",   hitWindow: 0.6, speed: 3 },
+  normal: { label: "NORMAL", hitWindow: 0.4, speed: 4 },
+  hard:   { label: "HARD",   hitWindow: 0.2, speed: 6 },
+} as const;
+type Difficulty = keyof typeof DIFFICULTIES;
+
+// ─── Songs ────────────────────────────────────────────────────────────────────
+
+interface SongNote { midi: number; beat: number; duration: number; }
+interface Song     { name: string; bpm: number; notes: SongNote[]; }
 
 const SONGS: Song[] = [
   {
     name: "Ode to Joy",
     bpm: 100,
     notes: [
-      { midi: 64, beat: 0, duration: 1 }, { midi: 64, beat: 1, duration: 1 },
-      { midi: 65, beat: 2, duration: 1 }, { midi: 67, beat: 3, duration: 1 },
-      { midi: 67, beat: 4, duration: 1 }, { midi: 65, beat: 5, duration: 1 },
-      { midi: 64, beat: 6, duration: 1 }, { midi: 62, beat: 7, duration: 1 },
-      { midi: 60, beat: 8, duration: 1 }, { midi: 60, beat: 9, duration: 1 },
-      { midi: 62, beat: 10, duration: 1 }, { midi: 64, beat: 11, duration: 1 },
-      { midi: 64, beat: 12, duration: 1.5 }, { midi: 62, beat: 13.5, duration: 0.5 },
-      { midi: 62, beat: 14, duration: 2 },
+      {midi:64,beat:0,duration:1},{midi:64,beat:1,duration:1},
+      {midi:65,beat:2,duration:1},{midi:67,beat:3,duration:1},
+      {midi:67,beat:4,duration:1},{midi:65,beat:5,duration:1},
+      {midi:64,beat:6,duration:1},{midi:62,beat:7,duration:1},
+      {midi:60,beat:8,duration:1},{midi:60,beat:9,duration:1},
+      {midi:62,beat:10,duration:1},{midi:64,beat:11,duration:1},
+      {midi:64,beat:12,duration:1.5},{midi:62,beat:13.5,duration:0.5},
+      {midi:62,beat:14,duration:2},
     ],
   },
   {
     name: "Twinkle Twinkle",
     bpm: 110,
     notes: [
-      { midi: 60, beat: 0, duration: 1 }, { midi: 60, beat: 1, duration: 1 },
-      { midi: 67, beat: 2, duration: 1 }, { midi: 67, beat: 3, duration: 1 },
-      { midi: 69, beat: 4, duration: 1 }, { midi: 69, beat: 5, duration: 1 },
-      { midi: 67, beat: 6, duration: 2 },
-      { midi: 65, beat: 8, duration: 1 }, { midi: 65, beat: 9, duration: 1 },
-      { midi: 64, beat: 10, duration: 1 }, { midi: 64, beat: 11, duration: 1 },
-      { midi: 62, beat: 12, duration: 1 }, { midi: 62, beat: 13, duration: 1 },
-      { midi: 60, beat: 14, duration: 2 },
+      {midi:60,beat:0,duration:1},{midi:60,beat:1,duration:1},
+      {midi:67,beat:2,duration:1},{midi:67,beat:3,duration:1},
+      {midi:69,beat:4,duration:1},{midi:69,beat:5,duration:1},
+      {midi:67,beat:6,duration:2},
+      {midi:65,beat:8,duration:1},{midi:65,beat:9,duration:1},
+      {midi:64,beat:10,duration:1},{midi:64,beat:11,duration:1},
+      {midi:62,beat:12,duration:1},{midi:62,beat:13,duration:1},
+      {midi:60,beat:14,duration:2},
     ],
   },
   {
     name: "Happy Birthday",
     bpm: 100,
     notes: [
-      { midi: 60, beat: 0.5, duration: 0.5 }, { midi: 60, beat: 1, duration: 0.5 },
-      { midi: 62, beat: 1.5, duration: 1 }, { midi: 60, beat: 2.5, duration: 1 },
-      { midi: 65, beat: 3.5, duration: 1 }, { midi: 64, beat: 4.5, duration: 2 },
-      { midi: 60, beat: 6.5, duration: 0.5 }, { midi: 60, beat: 7, duration: 0.5 },
-      { midi: 62, beat: 7.5, duration: 1 }, { midi: 60, beat: 8.5, duration: 1 },
-      { midi: 67, beat: 9.5, duration: 1 }, { midi: 65, beat: 10.5, duration: 2 },
+      {midi:60,beat:0.5,duration:0.5},{midi:60,beat:1,duration:0.5},
+      {midi:62,beat:1.5,duration:1},{midi:60,beat:2.5,duration:1},
+      {midi:65,beat:3.5,duration:1},{midi:64,beat:4.5,duration:2},
+      {midi:60,beat:6.5,duration:0.5},{midi:60,beat:7,duration:0.5},
+      {midi:62,beat:7.5,duration:1},{midi:60,beat:8.5,duration:1},
+      {midi:67,beat:9.5,duration:1},{midi:65,beat:10.5,duration:2},
     ],
   },
   {
     name: "C Major Scale",
     bpm: 120,
     notes: [
-      { midi: 60, beat: 0, duration: 1 }, { midi: 62, beat: 1, duration: 1 },
-      { midi: 64, beat: 2, duration: 1 }, { midi: 65, beat: 3, duration: 1 },
-      { midi: 67, beat: 4, duration: 1 }, { midi: 69, beat: 5, duration: 1 },
-      { midi: 71, beat: 6, duration: 1 }, { midi: 72, beat: 7, duration: 2 },
-      { midi: 71, beat: 9, duration: 1 }, { midi: 69, beat: 10, duration: 1 },
-      { midi: 67, beat: 11, duration: 1 }, { midi: 65, beat: 12, duration: 1 },
-      { midi: 64, beat: 13, duration: 1 }, { midi: 62, beat: 14, duration: 1 },
-      { midi: 60, beat: 15, duration: 2 },
+      {midi:60,beat:0,duration:1},{midi:62,beat:1,duration:1},
+      {midi:64,beat:2,duration:1},{midi:65,beat:3,duration:1},
+      {midi:67,beat:4,duration:1},{midi:69,beat:5,duration:1},
+      {midi:71,beat:6,duration:1},{midi:72,beat:7,duration:2},
+      {midi:71,beat:9,duration:1},{midi:69,beat:10,duration:1},
+      {midi:67,beat:11,duration:1},{midi:65,beat:12,duration:1},
+      {midi:64,beat:13,duration:1},{midi:62,beat:14,duration:1},
+      {midi:60,beat:15,duration:2},
     ],
   },
   {
-    name: "Für Elise (Theme)",
+    name: "Für Elise",
     bpm: 90,
     notes: [
-      { midi: 76, beat: 0, duration: 0.5 }, { midi: 75, beat: 0.5, duration: 0.5 },
-      { midi: 76, beat: 1, duration: 0.5 }, { midi: 75, beat: 1.5, duration: 0.5 },
-      { midi: 76, beat: 2, duration: 0.5 }, { midi: 71, beat: 2.5, duration: 0.5 },
-      { midi: 74, beat: 3, duration: 0.5 }, { midi: 72, beat: 3.5, duration: 0.5 },
-      { midi: 69, beat: 4, duration: 1 },
-      { midi: 60, beat: 5, duration: 0.5 }, { midi: 64, beat: 5.5, duration: 0.5 },
-      { midi: 69, beat: 6, duration: 1 },
-      { midi: 71, beat: 7, duration: 1 },
-      { midi: 64, beat: 8, duration: 0.5 }, { midi: 68, beat: 8.5, duration: 0.5 },
-      { midi: 71, beat: 9, duration: 1 },
-      { midi: 72, beat: 10, duration: 1 },
+      {midi:76,beat:0,duration:0.5},{midi:75,beat:0.5,duration:0.5},
+      {midi:76,beat:1,duration:0.5},{midi:75,beat:1.5,duration:0.5},
+      {midi:76,beat:2,duration:0.5},{midi:71,beat:2.5,duration:0.5},
+      {midi:74,beat:3,duration:0.5},{midi:72,beat:3.5,duration:0.5},
+      {midi:69,beat:4,duration:1},
+      {midi:60,beat:5,duration:0.5},{midi:64,beat:5.5,duration:0.5},
+      {midi:69,beat:6,duration:1},{midi:71,beat:7,duration:1},
+      {midi:64,beat:8,duration:0.5},{midi:68,beat:8.5,duration:0.5},
+      {midi:71,beat:9,duration:1},{midi:72,beat:10,duration:1},
+    ],
+  },
+  {
+    name: "Canon in D (Theme)",
+    bpm: 80,
+    notes: [
+      {midi:62,beat:0,duration:1},{midi:69,beat:1,duration:1},
+      {midi:67,beat:2,duration:1},{midi:64,beat:3,duration:1},
+      {midi:66,beat:4,duration:1},{midi:64,beat:5,duration:1},
+      {midi:62,beat:6,duration:1},{midi:64,beat:7,duration:1},
+      {midi:66,beat:8,duration:0.5},{midi:67,beat:8.5,duration:0.5},
+      {midi:66,beat:9,duration:0.5},{midi:64,beat:9.5,duration:0.5},
+      {midi:62,beat:10,duration:0.5},{midi:64,beat:10.5,duration:0.5},
+      {midi:66,beat:11,duration:0.5},{midi:67,beat:11.5,duration:0.5},
+      {midi:69,beat:12,duration:2},
+    ],
+  },
+  {
+    name: "Moonlight Sonata (Op.27)",
+    bpm: 60,
+    notes: [
+      {midi:52,beat:0,duration:0.33},{midi:56,beat:0.33,duration:0.33},{midi:59,beat:0.67,duration:0.33},
+      {midi:52,beat:1,duration:0.33},{midi:56,beat:1.33,duration:0.33},{midi:59,beat:1.67,duration:0.33},
+      {midi:52,beat:2,duration:0.33},{midi:56,beat:2.33,duration:0.33},{midi:59,beat:2.67,duration:0.33},
+      {midi:52,beat:3,duration:0.33},{midi:56,beat:3.33,duration:0.33},{midi:59,beat:3.67,duration:0.33},
+      {midi:51,beat:4,duration:0.33},{midi:56,beat:4.33,duration:0.33},{midi:59,beat:4.67,duration:0.33},
+      {midi:51,beat:5,duration:0.33},{midi:56,beat:5.33,duration:0.33},{midi:59,beat:5.67,duration:0.33},
+      {midi:51,beat:6,duration:0.33},{midi:55,beat:6.33,duration:0.33},{midi:59,beat:6.67,duration:0.33},
+      {midi:51,beat:7,duration:0.33},{midi:55,beat:7.33,duration:0.33},{midi:59,beat:7.67,duration:0.33},
+    ],
+  },
+  {
+    name: "Jingle Bells",
+    bpm: 130,
+    notes: [
+      {midi:64,beat:0,duration:0.5},{midi:64,beat:0.5,duration:0.5},{midi:64,beat:1,duration:1},
+      {midi:64,beat:2,duration:0.5},{midi:64,beat:2.5,duration:0.5},{midi:64,beat:3,duration:1},
+      {midi:64,beat:4,duration:0.5},{midi:67,beat:4.5,duration:0.5},{midi:60,beat:5,duration:0.5},
+      {midi:62,beat:5.5,duration:0.5},{midi:64,beat:6,duration:2},
+      {midi:65,beat:8,duration:0.5},{midi:65,beat:8.5,duration:0.5},{midi:65,beat:9,duration:0.5},{midi:65,beat:9.5,duration:0.5},
+      {midi:65,beat:10,duration:0.5},{midi:64,beat:10.5,duration:0.5},{midi:64,beat:11,duration:0.5},{midi:64,beat:11.5,duration:0.5},
+      {midi:64,beat:12,duration:0.5},{midi:62,beat:12.5,duration:0.5},{midi:62,beat:13,duration:0.5},
+      {midi:64,beat:13.5,duration:0.5},{midi:62,beat:14,duration:1},{midi:67,beat:15,duration:1},
     ],
   },
 ];
 
-// ─── Audio Engine ─────────────────────────────────────────────────────────────
-
-interface ActiveNote {
-  oscillator: OscillatorNode;
-  gainNode: GainNode;
-}
-
-// ─── Game Types ───────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type GameState = "idle" | "countdown" | "playing" | "finished";
 
@@ -147,989 +179,764 @@ interface FallingNote {
   beatDuration: number;
   hit: boolean;
   missed: boolean;
-  hitTime?: number; // for flash effect
+  hitTime?: number;
 }
 
-// ─── Accent colours per key lane ─────────────────────────────────────────────
-const LANE_COLORS = [
-  "#ec4899", "#f97316", "#eab308", "#22c55e",
-  "#00d4ff", "#a855f7", "#ec4899", "#f97316",
-  "#eab308", "#22c55e", "#00d4ff", "#a855f7",
-];
+interface KeyRect { x: number; y: number; w: number; h: number; isBlack: boolean; }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Piano layout helper ──────────────────────────────────────────────────────
+
+function buildPianoLayout(canvasW: number, canvasH: number): Map<number, KeyRect> {
+  const whiteW = canvasW / WHITE_COUNT;
+  const blackW = whiteW * 0.58;
+  const blackH = canvasH * 0.62;
+  const rects  = new Map<number, KeyRect>();
+
+  let wi = 0;
+  for (const midi of ALL_MIDIS) {
+    if (!isBlack(midi)) {
+      rects.set(midi, { x: wi * whiteW, y: 0, w: whiteW, h: canvasH, isBlack: false });
+      wi++;
+    }
+  }
+  for (const midi of ALL_MIDIS) {
+    if (isBlack(midi)) {
+      const left = rects.get(midi - 1);
+      if (left) rects.set(midi, { x: left.x + left.w - blackW / 2, y: 0, w: blackW, h: blackH, isBlack: true });
+    }
+  }
+  return rects;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PianoPractice() {
   const { t } = useLang();
 
-  // ── Audio refs ──
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  // Audio
+  const ctxRef      = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const masterGainRef = useRef<GainNode | null>(null);
-  const activeNotesRef = useRef<Map<number, ActiveNote>>(new Map());
-  const sustainRef = useRef(false);
-  const sustainedNotesRef = useRef<Set<number>>(new Set());
+  const masterRef   = useRef<GainNode | null>(null);
+  const activeRef   = useRef<Map<number, { osc: OscillatorNode; gain: GainNode }>>(new Map());
+  const sustainRef  = useRef(false);
+  const sustainedRef= useRef<Set<number>>(new Set());
+  const [audioReady, setAudioReady] = useState(false);
 
-  // ── Canvas refs ──
-  const dftCanvasRef = useRef<HTMLCanvasElement>(null);
-  const highwayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const pianoCanvasRef = useRef<HTMLCanvasElement>(null);
-  const rafDftRef = useRef<number>(0);
-  const rafHighwayRef = useRef<number>(0);
+  // Canvases
+  const dftRef     = useRef<HTMLCanvasElement>(null);
+  const hwRef      = useRef<HTMLCanvasElement>(null);
+  const pianoRef   = useRef<HTMLCanvasElement>(null);
+  const rafDft     = useRef(0);
+  const rafHw      = useRef(0);
 
-  // ── Game state ──
-  const [gameState, setGameState] = useState<GameState>("idle");
-  const [selectedSong, setSelectedSong] = useState(0);
-  const [score, setScore] = useState(0);
-  const [combo, setCombo] = useState(0);
-  const [maxCombo, setMaxCombo] = useState(0);
-  const [countdown, setCountdown] = useState(3);
-  const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
-  const [accuracy, setAccuracy] = useState(100);
+  // Piano layout (computed once per resize)
+  const layoutRef  = useRef<Map<number, KeyRect>>(new Map());
 
-  // Mutable refs for game loop (avoid stale closures)
-  const gameStateRef = useRef<GameState>("idle");
-  const fallingNotesRef = useRef<FallingNote[]>([]);
-  const scoreRef = useRef(0);
-  const comboRef = useRef(0);
-  const maxComboRef = useRef(0);
-  const totalHitsRef = useRef(0);
-  const totalNotesRef = useRef(0);
-  const pressedKeysRef = useRef<Set<number>>(new Set());
-  const gameStartTimeRef = useRef(0);
-  const songRef = useRef<Song>(SONGS[0]);
-  const noteIdRef = useRef(0);
+  // Game state
+  const [gameState,    setGameState]    = useState<GameState>("idle");
+  const [songIdx,      setSongIdx]      = useState(0);
+  const [difficulty,   setDifficulty]   = useState<Difficulty>("normal");
+  const [score,        setScore]        = useState(0);
+  const [combo,        setCombo]        = useState(0);
+  const [maxCombo,     setMaxCombo]     = useState(0);
+  const [accuracy,     setAccuracy]     = useState(100);
+  const [countdown,    setCountdown]    = useState(3);
+  const [midiConnected,setMidiConnected]= useState(false);
+  const [pressedKeys,  setPressedKeys]  = useState<Set<number>>(new Set());
 
-  // ── Piano key dimensions (computed from canvas width) ──
-  const pianoLayoutRef = useRef<{
-    whiteW: number;
-    whiteH: number;
-    blackW: number;
-    blackH: number;
-    keyRects: Map<number, { x: number; y: number; w: number; h: number; isBlack: boolean }>;
-  } | null>(null);
+  // Mutable game refs (avoid stale closures in rAF)
+  const gsRef        = useRef<GameState>("idle");
+  const fallingRef   = useRef<FallingNote[]>([]);
+  const scoreRef     = useRef(0);
+  const comboRef     = useRef(0);
+  const maxComboRef  = useRef(0);
+  const hitsRef      = useRef(0);
+  const totalRef     = useRef(0);
+  const pressedRef   = useRef<Set<number>>(new Set());
+  const startTimeRef = useRef(0);
+  const songRef      = useRef<Song>(SONGS[0]);
+  const diffRef      = useRef<Difficulty>("normal");
+  const noteIdRef    = useRef(0);
+  const cdRef        = useRef(3);
 
-  // ─── Audio init ──────────────────────────────────────────────────────────────
+  // ── Audio ────────────────────────────────────────────────────────────────────
 
   const initAudio = useCallback(() => {
-    if (audioCtxRef.current) return;
+    if (ctxRef.current) return;
     const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.8;
+    analyser.smoothingTimeConstant = 0.85;
     const master = ctx.createGain();
-    master.gain.value = 0.4;
+    master.gain.value = 0.35;
     master.connect(analyser);
     analyser.connect(ctx.destination);
-    audioCtxRef.current = ctx;
+    ctxRef.current = ctx;
     analyserRef.current = analyser;
-    masterGainRef.current = master;
+    masterRef.current = master;
+    setAudioReady(true);
   }, []);
 
   const playNote = useCallback((midi: number) => {
-    initAudio();
-    const ctx = audioCtxRef.current!;
-    const master = masterGainRef.current!;
-    if (activeNotesRef.current.has(midi)) return;
-
+    if (!ctxRef.current || !masterRef.current) return;
+    if (activeRef.current.has(midi)) return;
+    const ctx = ctxRef.current;
     const freq = noteFreq(midi);
-    const osc = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    // Piano-like timbre: fundamental + harmonics
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
     osc.type = "triangle";
     osc.frequency.value = freq;
-
-    // ADSR envelope
     const now = ctx.currentTime;
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.7, now + 0.01);   // attack
-    gainNode.gain.exponentialRampToValueAtTime(0.4, now + 0.1); // decay
-    gainNode.gain.setValueAtTime(0.4, now + 0.1);              // sustain
-
-    osc.connect(gainNode);
-    gainNode.connect(master);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.7, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.4, now + 0.1);
+    osc.connect(gain);
+    gain.connect(masterRef.current);
     osc.start(now);
-
-    activeNotesRef.current.set(midi, { oscillator: osc, gainNode });
-  }, [initAudio]);
+    activeRef.current.set(midi, { osc, gain });
+  }, []);
 
   const stopNote = useCallback((midi: number) => {
-    if (sustainRef.current) {
-      sustainedNotesRef.current.add(midi);
-      return;
-    }
-    const note = activeNotesRef.current.get(midi);
-    if (!note) return;
-    const ctx = audioCtxRef.current!;
-    const now = ctx.currentTime;
-    note.gainNode.gain.cancelScheduledValues(now);
-    note.gainNode.gain.setValueAtTime(note.gainNode.gain.value, now);
-    note.gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3); // release
-    note.oscillator.stop(now + 0.3);
-    activeNotesRef.current.delete(midi);
+    if (sustainRef.current) { sustainedRef.current.add(midi); return; }
+    const note = activeRef.current.get(midi);
+    if (!note || !ctxRef.current) return;
+    const now = ctxRef.current.currentTime;
+    note.gain.gain.cancelScheduledValues(now);
+    note.gain.gain.setValueAtTime(note.gain.gain.value, now);
+    note.gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    note.osc.stop(now + 0.3);
+    activeRef.current.delete(midi);
   }, []);
 
-  // ─── Piano canvas layout ──────────────────────────────────────────────────────
+  // ── Piano draw ───────────────────────────────────────────────────────────────
 
-  const computePianoLayout = useCallback((canvas: HTMLCanvasElement) => {
-    const W = canvas.width;
-    const H = canvas.height;
-    const whiteW = W / WHITE_KEY_COUNT;
-    const whiteH = H;
-    const blackW = whiteW * 0.6;
-    const blackH = H * 0.62;
-
-    const keyRects = new Map<number, { x: number; y: number; w: number; h: number; isBlack: boolean }>();
-
-    // White keys first
-    let whiteIdx = 0;
-    for (let midi = KEYBOARD_START_MIDI; midi <= KEYBOARD_END_MIDI; midi++) {
-      if (!isBlackKey(midi)) {
-        keyRects.set(midi, { x: whiteIdx * whiteW, y: 0, w: whiteW, h: whiteH, isBlack: false });
-        whiteIdx++;
-      }
-    }
-
-    // Black keys: positioned between white keys
-    for (let midi = KEYBOARD_START_MIDI; midi <= KEYBOARD_END_MIDI; midi++) {
-      if (isBlackKey(midi)) {
-        // Find the white key to the left
-        const leftWhite = keyRects.get(midi - 1);
-        if (leftWhite) {
-          const x = leftWhite.x + leftWhite.w - blackW / 2;
-          keyRects.set(midi, { x, y: 0, w: blackW, h: blackH, isBlack: true });
-        }
-      }
-    }
-
-    pianoLayoutRef.current = { whiteW, whiteH, blackW, blackH, keyRects };
-    return pianoLayoutRef.current;
-  }, []);
-
-  const drawPiano = useCallback((canvas: HTMLCanvasElement, pressed: Set<number>) => {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const layout = pianoLayoutRef.current || computePianoLayout(canvas);
-    const { keyRects } = layout;
-    const W = canvas.width;
-    const H = canvas.height;
-
-    ctx.clearRect(0, 0, W, H);
-
-    // Draw white keys first
-    Array.from(keyRects.entries()).forEach(([midi, rect]) => {
-      if (rect.isBlack) return;
-      const isPressed = pressed.has(midi);
-      const noteColor = LANE_COLORS[midi % 12];
-
-      // Key body
-      const grad = ctx.createLinearGradient(rect.x, 0, rect.x, rect.h);
-      if (isPressed) {
-        grad.addColorStop(0, noteColor + "cc");
-        grad.addColorStop(1, noteColor + "66");
-      } else {
-        grad.addColorStop(0, "#f8f6f2");
-        grad.addColorStop(1, "#e8e4de");
-      }
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.roundRect(rect.x + 1, rect.y, rect.w - 2, rect.h - 2, [0, 0, 4, 4]);
-      ctx.fill();
-
-      // Border
-      ctx.strokeStyle = isPressed ? noteColor : "rgba(0,0,0,0.15)";
-      ctx.lineWidth = isPressed ? 1.5 : 1;
-      ctx.beginPath();
-      ctx.roundRect(rect.x + 1, rect.y, rect.w - 2, rect.h - 2, [0, 0, 4, 4]);
-      ctx.stroke();
-
-      // Note label on bottom
-      if (rect.w > 18) {
-        ctx.fillStyle = isPressed ? "white" : "rgba(0,0,0,0.35)";
-        ctx.font = `bold ${Math.min(11, rect.w * 0.35)}px 'IBM Plex Mono', monospace`;
-        ctx.textAlign = "center";
-        const label = noteLabel(midi);
-        ctx.fillText(label, rect.x + rect.w / 2, rect.h - 6);
-      }
-    });
-
-    // Draw black keys on top
-    Array.from(keyRects.entries()).forEach(([midi, rect]) => {
-      if (!rect.isBlack) return;
-      const isPressed = pressed.has(midi);
-      const noteColor = LANE_COLORS[midi % 12];
-
-      const grad = ctx.createLinearGradient(rect.x, 0, rect.x, rect.h);
-      if (isPressed) {
-        grad.addColorStop(0, noteColor);
-        grad.addColorStop(1, noteColor + "88");
-      } else {
-        grad.addColorStop(0, "#1a1a2e");
-        grad.addColorStop(1, "#0a0a18");
-      }
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [0, 0, 3, 3]);
-      ctx.fill();
-
-      if (isPressed) {
-        ctx.strokeStyle = noteColor;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [0, 0, 3, 3]);
-        ctx.stroke();
-      }
-    });
-  }, [computePianoLayout]);
-
-  // ─── DFT Spectrum Visualizer ──────────────────────────────────────────────────
-
-  const drawDFT = useCallback(() => {
-    const canvas = dftCanvasRef.current;
+  const drawPiano = useCallback((pressed: Set<number>) => {
+    const canvas = pianoRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const analyser = analyserRef.current;
-
-    const W = canvas.width;
-    const H = canvas.height;
+    const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    // Background
-    ctx.fillStyle = "#0a0f1e";
-    ctx.fillRect(0, 0, W, H);
+    const layout = layoutRef.current;
 
-    // Grid lines
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
-    ctx.lineWidth = 1;
+    // White keys
+    layout.forEach((r, midi) => {
+      if (r.isBlack) return;
+      const on = pressed.has(midi);
+      const col = LANE_COLORS[midi % 12];
+      const g = ctx.createLinearGradient(r.x, 0, r.x, r.h);
+      if (on) { g.addColorStop(0, col + "cc"); g.addColorStop(1, col + "55"); }
+      else    { g.addColorStop(0, "#f8f6f2");  g.addColorStop(1, "#e0dcd6"); }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.roundRect(r.x + 1, 0, r.w - 2, r.h - 2, [0,0,4,4]); ctx.fill();
+      ctx.strokeStyle = on ? col : "rgba(0,0,0,0.15)";
+      ctx.lineWidth = on ? 1.5 : 1;
+      ctx.beginPath(); ctx.roundRect(r.x + 1, 0, r.w - 2, r.h - 2, [0,0,4,4]); ctx.stroke();
+      if (r.w > 16) {
+        ctx.fillStyle = on ? "white" : "rgba(0,0,0,0.3)";
+        ctx.font = `bold ${Math.min(10, r.w * 0.32)}px 'IBM Plex Mono',monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText(noteLabel(midi), r.x + r.w / 2, r.h - 5);
+      }
+    });
+
+    // Black keys
+    layout.forEach((r, midi) => {
+      if (!r.isBlack) return;
+      const on = pressed.has(midi);
+      const col = LANE_COLORS[midi % 12];
+      const g = ctx.createLinearGradient(r.x, 0, r.x, r.h);
+      if (on) { g.addColorStop(0, col); g.addColorStop(1, col + "88"); }
+      else    { g.addColorStop(0, "#1a1a2e"); g.addColorStop(1, "#0a0a18"); }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.roundRect(r.x, 0, r.w, r.h, [0,0,3,3]); ctx.fill();
+      if (on) {
+        ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.roundRect(r.x, 0, r.w, r.h, [0,0,3,3]); ctx.stroke();
+      }
+    });
+  }, []);
+
+  // ── DFT draw ─────────────────────────────────────────────────────────────────
+
+  const drawDFT = useCallback(() => {
+    const canvas = dftRef.current;
+    if (!canvas) { rafDft.current = requestAnimationFrame(drawDFT); return; }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { rafDft.current = requestAnimationFrame(drawDFT); return; }
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#0a0f1e"; ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = "rgba(255,255,255,0.04)"; ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
-      ctx.beginPath();
-      ctx.moveTo(0, (H / 4) * i);
-      ctx.lineTo(W, (H / 4) * i);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, H * i / 4); ctx.lineTo(W, H * i / 4); ctx.stroke();
     }
 
-    if (!analyser) {
-      // Flat line when no audio
-      ctx.strokeStyle = "rgba(0,212,255,0.3)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(0, H / 2);
-      ctx.lineTo(W, H / 2);
-      ctx.stroke();
-
-      // Label
+    if (!analyserRef.current) {
+      ctx.strokeStyle = "rgba(0,212,255,0.3)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
       ctx.fillStyle = "rgba(138,155,176,0.5)";
-      ctx.font = "11px 'IBM Plex Mono', monospace";
-      ctx.textAlign = "left";
-      ctx.fillText("DFT SPECTRUM — play a note to activate", 12, 16);
-      rafDftRef.current = requestAnimationFrame(drawDFT);
+      ctx.font = "10px 'IBM Plex Mono',monospace"; ctx.textAlign = "left";
+      ctx.fillText("Play a note to activate", 10, 16);
+      rafDft.current = requestAnimationFrame(drawDFT);
       return;
     }
 
+    const analyser = analyserRef.current;
     const bufLen = analyser.frequencyBinCount;
-    const freqData = new Uint8Array(bufLen);
-    analyser.getByteFrequencyData(freqData);
+    const data   = new Uint8Array(bufLen);
+    analyser.getByteFrequencyData(data);
+    const sr     = ctxRef.current?.sampleRate ?? 44100;
+    const maxBin = Math.min(Math.floor(4000 / (sr / 2) * bufLen), bufLen);
 
-    // We only visualize 0–4000 Hz (piano range)
-    const sampleRate = audioCtxRef.current?.sampleRate ?? 44100;
-    const maxBin = Math.floor((4000 / (sampleRate / 2)) * bufLen);
-    const binCount = Math.min(maxBin, bufLen);
-
-    // Draw spectrum bars
-    const barW = W / binCount;
-    for (let i = 0; i < binCount; i++) {
-      const v = freqData[i] / 255;
-      const barH = v * H * 0.9;
-      const x = i * barW;
-
-      // Color: gradient from cyan (low) to pink (high)
-      const hue = 180 + v * 120; // 180 (cyan) → 300 (magenta)
-      ctx.fillStyle = `hsla(${hue}, 100%, 60%, ${0.3 + v * 0.7})`;
-      ctx.fillRect(x, H - barH, barW - 0.5, barH);
+    for (let i = 0; i < maxBin; i++) {
+      const v  = data[i] / 255;
+      const bH = v * H * 0.9;
+      const x  = (i / maxBin) * W;
+      const bW = W / maxBin + 0.5;
+      ctx.fillStyle = `hsla(${180 + v * 120},100%,60%,${0.3 + v * 0.7})`;
+      ctx.fillRect(x, H - bH, bW, bH);
     }
 
-    // Overlay line
-    ctx.strokeStyle = "rgba(0,212,255,0.6)";
-    ctx.lineWidth = 1.5;
+    // Line overlay
+    ctx.strokeStyle = "rgba(0,212,255,0.6)"; ctx.lineWidth = 1.5;
     ctx.beginPath();
-    for (let i = 0; i < binCount; i++) {
-      const v = freqData[i] / 255;
-      const x = (i / binCount) * W;
+    for (let i = 0; i < maxBin; i++) {
+      const v = data[i] / 255;
+      const x = (i / maxBin) * W;
       const y = H - v * H * 0.9;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
 
-    // Frequency axis labels
-    const freqLabels = [110, 220, 440, 880, 1760, 3520];
-    ctx.fillStyle = "rgba(138,155,176,0.6)";
-    ctx.font = "9px 'IBM Plex Mono', monospace";
-    ctx.textAlign = "center";
-    for (const f of freqLabels) {
+    // Freq labels
+    ctx.fillStyle = "rgba(138,155,176,0.55)";
+    ctx.font = "9px 'IBM Plex Mono',monospace"; ctx.textAlign = "center";
+    for (const f of [110,220,440,880,1760,3520]) {
       if (f > 4000) continue;
-      const x = (f / 4000) * W;
-      ctx.fillText(f >= 1000 ? `${f / 1000}k` : `${f}`, x, H - 3);
+      ctx.fillText(f >= 1000 ? `${f/1000}k` : `${f}`, (f / 4000) * W, H - 3);
     }
 
-    // Title
     ctx.fillStyle = "rgba(0,212,255,0.7)";
-    ctx.font = "bold 10px 'IBM Plex Mono', monospace";
-    ctx.textAlign = "left";
-    ctx.fillText("DISCRETE FOURIER TRANSFORM  0 – 4 kHz", 10, 14);
+    ctx.font = "bold 9px 'IBM Plex Mono',monospace"; ctx.textAlign = "left";
+    ctx.fillText("DFT  0–4 kHz", 8, 13);
 
-    rafDftRef.current = requestAnimationFrame(drawDFT);
+    rafDft.current = requestAnimationFrame(drawDFT);
   }, []);
 
-  // ─── Highway Game Engine ──────────────────────────────────────────────────────
-
-  // Highway: notes fall from top to a hit-zone at the bottom
-  // Each lane corresponds to a MIDI note in the song
-  // Speed: notes travel the full canvas height in HIGHWAY_BEATS beats of visible window
-
-  const HIGHWAY_VISIBLE_BEATS = 4; // how many beats are visible at once
-  const HIT_ZONE_FRACTION = 0.85;  // hit zone is at 85% down the canvas
+  // ── Highway draw ─────────────────────────────────────────────────────────────
+  // One lane per piano key (C3–B5), aligned with the keyboard below.
+  // White keys get full-height lanes; black keys get narrower overlapping lanes.
 
   const drawHighway = useCallback(() => {
-    const canvas = highwayCanvasRef.current;
-    if (!canvas) return;
+    const canvas = hwRef.current;
+    if (!canvas) { rafHw.current = requestAnimationFrame(drawHighway); return; }
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const W = canvas.width;
-    const H = canvas.height;
-    const song = songRef.current;
-    const state = gameStateRef.current;
-
+    if (!ctx) { rafHw.current = requestAnimationFrame(drawHighway); return; }
+    const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
     // Background
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-    bgGrad.addColorStop(0, "#0a0f1e");
-    bgGrad.addColorStop(1, "#0f1830");
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, W, H);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#0a0f1e"); bg.addColorStop(1, "#0f1830");
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-    // Get unique MIDI notes in song for lane assignment
-    const uniqueMidis = Array.from(new Set(song.notes.map((n) => n.midi))).sort((a, b) => a - b);
-    const laneCount = uniqueMidis.length;
-    const laneW = W / laneCount;
+    const layout = layoutRef.current;
+    if (layout.size === 0) { rafHw.current = requestAnimationFrame(drawHighway); return; }
 
-    // Lane backgrounds + vertical dividers
-    for (let i = 0; i < laneCount; i++) {
-      const midi = uniqueMidis[i];
-      const color = LANE_COLORS[midi % 12];
-      // Subtle lane tint
-      ctx.fillStyle = `${color}08`;
-      ctx.fillRect(i * laneW, 0, laneW, H);
-      // Divider
-      if (i > 0) {
-        ctx.strokeStyle = "rgba(255,255,255,0.05)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(i * laneW, 0);
-        ctx.lineTo(i * laneW, H);
-        ctx.stroke();
+    // Compute lane x positions from piano layout (scaled to highway width)
+    // Piano canvas and highway canvas share the same width → use same proportions
+    const pianoCanvas = pianoRef.current;
+    const pianoW = pianoCanvas ? pianoCanvas.width : W;
+    const scale  = W / pianoW;
+
+    // Lane dividers (white key boundaries)
+    ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+    layout.forEach((r, midi) => {
+      if (r.isBlack) return;
+      const x = r.x * scale;
+      if (midi > KEYBOARD_START) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
       }
-    }
+      // Subtle lane tint
+      ctx.fillStyle = `${LANE_COLORS[midi % 12]}06`;
+      ctx.fillRect(x, 0, r.w * scale, H);
+    });
 
-    // Hit zone line
-    const hitY = H * HIT_ZONE_FRACTION;
-    const hitGrad = ctx.createLinearGradient(0, hitY - 2, 0, hitY + 2);
-    hitGrad.addColorStop(0, "rgba(236,72,153,0)");
-    hitGrad.addColorStop(0.5, "rgba(236,72,153,0.8)");
-    hitGrad.addColorStop(1, "rgba(236,72,153,0)");
-    ctx.fillStyle = hitGrad;
-    ctx.fillRect(0, hitY - 2, W, 4);
+    const HIT_Y = H * 0.88;
 
-    // Hit zone key indicators
-    for (let i = 0; i < laneCount; i++) {
-      const midi = uniqueMidis[i];
-      const color = LANE_COLORS[midi % 12];
-      const isPressed = pressedKeysRef.current.has(midi);
-      const x = i * laneW + laneW / 2;
+    // Hit zone glow line
+    const hg = ctx.createLinearGradient(0, HIT_Y - 3, 0, HIT_Y + 3);
+    hg.addColorStop(0, "rgba(236,72,153,0)");
+    hg.addColorStop(0.5, "rgba(236,72,153,0.9)");
+    hg.addColorStop(1, "rgba(236,72,153,0)");
+    ctx.fillStyle = hg; ctx.fillRect(0, HIT_Y - 3, W, 6);
 
-      ctx.beginPath();
-      ctx.arc(x, hitY, laneW * 0.3, 0, Math.PI * 2);
-      ctx.fillStyle = isPressed ? color : `${color}30`;
+    // Hit zone key indicators (one circle per key, aligned with keyboard)
+    layout.forEach((r, midi) => {
+      const col = LANE_COLORS[midi % 12];
+      const cx  = (r.x + r.w / 2) * scale;
+      const rad = (r.w * scale) * (r.isBlack ? 0.35 : 0.38);
+      const on  = pressedRef.current.has(midi);
+
+      ctx.beginPath(); ctx.arc(cx, HIT_Y, rad, 0, Math.PI * 2);
+      ctx.fillStyle = on ? col : `${col}28`;
       ctx.fill();
-      ctx.strokeStyle = isPressed ? color : `${color}60`;
-      ctx.lineWidth = isPressed ? 2 : 1;
+      ctx.strokeStyle = on ? col : `${col}55`;
+      ctx.lineWidth = on ? 2 : 1;
       ctx.stroke();
 
-      // Note label
-      ctx.fillStyle = isPressed ? "white" : `${color}90`;
-      ctx.font = `bold ${Math.min(11, laneW * 0.25)}px 'IBM Plex Mono', monospace`;
-      ctx.textAlign = "center";
-      ctx.fillText(noteLabel(midi), x, hitY + 4);
-    }
-
-    if (state === "idle" || state === "countdown") {
-      // Show song title and instructions
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
-      ctx.font = "bold 18px 'DM Sans', sans-serif";
-      ctx.textAlign = "center";
-      if (state === "countdown") {
-        ctx.fillStyle = "#ec4899";
-        ctx.font = "bold 64px 'DM Sans', sans-serif";
-        ctx.fillText(String(countdown), W / 2, H / 2);
-      } else {
-        ctx.fillText("Select a song and press START", W / 2, H / 2);
+      if (!r.isBlack && r.w * scale > 14) {
+        ctx.fillStyle = on ? "white" : `${col}80`;
+        ctx.font = `bold ${Math.min(9, r.w * scale * 0.28)}px 'IBM Plex Mono',monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText(noteLabel(midi), cx, HIT_Y + 3.5);
       }
-      rafHighwayRef.current = requestAnimationFrame(drawHighway);
-      return;
+    });
+
+    const gs = gsRef.current;
+
+    if (gs === "idle") {
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = "bold 16px 'DM Sans',sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("Select a song and press START", W / 2, H / 2);
+      rafHw.current = requestAnimationFrame(drawHighway); return;
     }
 
-    if (state === "finished") {
+    if (gs === "countdown") {
       ctx.fillStyle = "#ec4899";
-      ctx.font = "bold 28px 'DM Sans', sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("FINISHED!", W / 2, H / 2 - 30);
-      ctx.fillStyle = "white";
-      ctx.font = "18px 'IBM Plex Mono', monospace";
-      ctx.fillText(`Score: ${scoreRef.current}`, W / 2, H / 2 + 10);
-      ctx.fillText(`Max Combo: ${maxComboRef.current}`, W / 2, H / 2 + 36);
-      rafHighwayRef.current = requestAnimationFrame(drawHighway);
-      return;
+      ctx.font = "bold 72px 'DM Sans',sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(String(cdRef.current), W / 2, H / 2 + 24);
+      rafHw.current = requestAnimationFrame(drawHighway); return;
     }
 
-    // ── Playing state ──
-    const now = performance.now();
-    const elapsed = (now - gameStartTimeRef.current) / 1000; // seconds
-    const bps = song.bpm / 60;
-    const currentBeat = elapsed * bps;
+    if (gs === "finished") {
+      ctx.fillStyle = "#ec4899";
+      ctx.font = "bold 28px 'DM Sans',sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("FINISHED!", W / 2, H / 2 - 28);
+      ctx.fillStyle = "white"; ctx.font = "16px 'IBM Plex Mono',monospace";
+      ctx.fillText(`Score: ${scoreRef.current}`, W / 2, H / 2 + 8);
+      ctx.fillText(`Max Combo: ×${maxComboRef.current}`, W / 2, H / 2 + 30);
+      rafHw.current = requestAnimationFrame(drawHighway); return;
+    }
 
-    // Spawn new falling notes
-    for (const sn of song.notes) {
-      const existing = fallingNotesRef.current.find((fn) => fn.beatStart === sn.beat && fn.midi === sn.midi);
-      if (!existing) {
-        // Spawn when the note's beat is within the visible window ahead
-        if (sn.beat >= currentBeat - 0.5 && sn.beat <= currentBeat + HIGHWAY_VISIBLE_BEATS + 1) {
-          fallingNotesRef.current.push({
-            id: noteIdRef.current++,
-            midi: sn.midi,
-            beatStart: sn.beat,
-            beatDuration: sn.duration,
-            hit: false,
-            missed: false,
-          });
-        }
+    // ── Playing ──
+    const now    = performance.now();
+    const elapsed = (now - startTimeRef.current) / 1000;
+    const bps    = songRef.current.bpm / 60;
+    const beat   = elapsed * bps;
+    const diff   = DIFFICULTIES[diffRef.current];
+    const visBeats = diff.speed; // visible beats window
+
+    // Spawn notes
+    for (const sn of songRef.current.notes) {
+      const already = fallingRef.current.some(fn => fn.beatStart === sn.beat && fn.midi === sn.midi);
+      if (!already && sn.beat >= beat - 0.5 && sn.beat <= beat + visBeats + 1) {
+        fallingRef.current.push({
+          id: noteIdRef.current++, midi: sn.midi,
+          beatStart: sn.beat, beatDuration: sn.duration,
+          hit: false, missed: false,
+        });
       }
     }
 
-    // Mark missed notes
-    for (const fn of fallingNotesRef.current) {
-      if (!fn.hit && !fn.missed && fn.beatStart + fn.beatDuration < currentBeat - 0.5) {
-        fn.missed = true;
-        comboRef.current = 0;
-        setCombo(0);
+    // Mark missed
+    for (const fn of fallingRef.current) {
+      if (!fn.hit && !fn.missed && fn.beatStart + fn.beatDuration < beat - 0.5) {
+        fn.missed = true; comboRef.current = 0; setCombo(0);
       }
     }
 
-    // Draw falling notes
-    for (const fn of fallingNotesRef.current) {
-      const laneIdx = uniqueMidis.indexOf(fn.midi);
-      if (laneIdx < 0) continue;
-
-      const beatFromNow = fn.beatStart - currentBeat;
-      // y: at beatFromNow=HIGHWAY_VISIBLE_BEATS → top (0), at beatFromNow=0 → hitY
-      const yTop = hitY - (beatFromNow / HIGHWAY_VISIBLE_BEATS) * hitY;
-      const notePixelH = (fn.beatDuration / HIGHWAY_VISIBLE_BEATS) * hitY;
-      const x = laneIdx * laneW + laneW * 0.1;
-      const w = laneW * 0.8;
+    // Draw notes
+    for (const fn of fallingRef.current) {
+      const r = layout.get(fn.midi);
+      if (!r) continue;
+      const col  = LANE_COLORS[fn.midi % 12];
+      const x    = r.x * scale;
+      const w    = r.w * scale;
+      const beatsFromNow = fn.beatStart - beat;
+      const yTop = HIT_Y - (beatsFromNow / visBeats) * HIT_Y;
+      const noteH = Math.max((fn.beatDuration / visBeats) * HIT_Y, 10);
 
       if (fn.missed) {
-        // Missed: grey
-        ctx.fillStyle = "rgba(100,100,120,0.4)";
-        ctx.beginPath();
-        ctx.roundRect(x, yTop, w, Math.max(notePixelH, 12), 4);
-        ctx.fill();
+        ctx.fillStyle = "rgba(80,80,100,0.35)";
+        ctx.beginPath(); ctx.roundRect(x + 1, yTop, w - 2, noteH, 3); ctx.fill();
         continue;
       }
-
       if (fn.hit) {
-        // Hit flash effect
-        const elapsed2 = fn.hitTime ? (now - fn.hitTime) / 300 : 1;
-        if (elapsed2 < 1) {
-          const alpha = 1 - elapsed2;
-          const color = LANE_COLORS[fn.midi % 12];
-          ctx.fillStyle = `${color}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
-          ctx.beginPath();
-          ctx.roundRect(x, hitY - 10, w, 20, 4);
-          ctx.fill();
+        const age = fn.hitTime ? (now - fn.hitTime) / 250 : 1;
+        if (age < 1) {
+          ctx.fillStyle = `${col}${Math.round((1 - age) * 200).toString(16).padStart(2,"0")}`;
+          ctx.beginPath(); ctx.roundRect(x + 1, HIT_Y - 8, w - 2, 16, 3); ctx.fill();
         }
         continue;
       }
 
       // Active note
-      const color = LANE_COLORS[fn.midi % 12];
-      const noteGrad = ctx.createLinearGradient(x, yTop, x, yTop + notePixelH);
-      noteGrad.addColorStop(0, `${color}dd`);
-      noteGrad.addColorStop(1, `${color}88`);
-      ctx.fillStyle = noteGrad;
-      ctx.beginPath();
-      ctx.roundRect(x, yTop, w, Math.max(notePixelH, 14), 6);
-      ctx.fill();
-
-      // Glow
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(x, yTop, w, Math.max(notePixelH, 14), 6);
-      ctx.stroke();
+      const ng = ctx.createLinearGradient(x, yTop, x, yTop + noteH);
+      ng.addColorStop(0, `${col}ee`); ng.addColorStop(1, `${col}77`);
+      ctx.fillStyle = ng;
+      ctx.shadowColor = col; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.roundRect(x + 1, yTop, w - 2, noteH, 4); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x + 1, yTop, w - 2, noteH, 4); ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
-    // Score overlay
+    // HUD
     ctx.fillStyle = "rgba(236,72,153,0.9)";
-    ctx.font = "bold 14px 'IBM Plex Mono', monospace";
-    ctx.textAlign = "left";
-    ctx.fillText(`${scoreRef.current}`, 10, 22);
+    ctx.font = "bold 13px 'IBM Plex Mono',monospace"; ctx.textAlign = "left";
+    ctx.fillText(`${scoreRef.current}`, 10, 20);
     if (comboRef.current > 1) {
-      ctx.fillStyle = "#eab308";
-      ctx.font = "bold 12px 'IBM Plex Mono', monospace";
-      ctx.fillText(`×${comboRef.current} COMBO`, 10, 40);
+      ctx.fillStyle = "#eab308"; ctx.font = "bold 11px 'IBM Plex Mono',monospace";
+      ctx.fillText(`×${comboRef.current} COMBO`, 10, 36);
     }
 
-    // Check if song finished
-    const lastBeat = Math.max(...song.notes.map((n) => n.beat + n.duration));
-    if (currentBeat > lastBeat + 2) {
-      gameStateRef.current = "finished";
-      setGameState("finished");
-      setScore(scoreRef.current);
-      setMaxCombo(maxComboRef.current);
-      const hits = totalHitsRef.current;
-      const total = totalNotesRef.current;
-      setAccuracy(total > 0 ? Math.round((hits / total) * 100) : 100);
+    // End check
+    const lastBeat = Math.max(...songRef.current.notes.map(n => n.beat + n.duration));
+    if (beat > lastBeat + 2) {
+      gsRef.current = "finished"; setGameState("finished");
+      setScore(scoreRef.current); setMaxCombo(maxComboRef.current);
+      setAccuracy(totalRef.current > 0 ? Math.round(hitsRef.current / totalRef.current * 100) : 100);
     }
 
-    rafHighwayRef.current = requestAnimationFrame(drawHighway);
-  }, [countdown]);
+    rafHw.current = requestAnimationFrame(drawHighway);
+  }, []);
 
-  // ─── Hit detection ────────────────────────────────────────────────────────────
+  // ── Hit detection ─────────────────────────────────────────────────────────────
 
   const checkHit = useCallback((midi: number) => {
-    if (gameStateRef.current !== "playing") return;
-    const song = songRef.current;
-    const bps = song.bpm / 60;
-    const elapsed = (performance.now() - gameStartTimeRef.current) / 1000;
-    const currentBeat = elapsed * bps;
-    const HIT_WINDOW = 0.4; // beats
+    if (gsRef.current !== "playing") return;
+    const bps  = songRef.current.bpm / 60;
+    const beat = ((performance.now() - startTimeRef.current) / 1000) * bps;
+    const win  = DIFFICULTIES[diffRef.current].hitWindow;
 
-    for (const fn of fallingNotesRef.current) {
+    for (const fn of fallingRef.current) {
       if (fn.midi !== midi || fn.hit || fn.missed) continue;
-      const diff = Math.abs(fn.beatStart - currentBeat);
-      if (diff <= HIT_WINDOW) {
-        fn.hit = true;
-        fn.hitTime = performance.now();
-        totalHitsRef.current++;
-
-        // Score: perfect < 0.1, good < 0.25, ok < 0.4
-        let pts = diff < 0.1 ? 100 : diff < 0.25 ? 70 : 40;
+      const diff = Math.abs(fn.beatStart - beat);
+      if (diff <= win) {
+        fn.hit = true; fn.hitTime = performance.now();
+        hitsRef.current++;
+        const pts = diff < win * 0.25 ? 100 : diff < win * 0.6 ? 70 : 40;
         comboRef.current++;
         if (comboRef.current > maxComboRef.current) maxComboRef.current = comboRef.current;
-        pts = Math.round(pts * (1 + comboRef.current * 0.05));
-        scoreRef.current += pts;
-        setScore(scoreRef.current);
-        setCombo(comboRef.current);
+        scoreRef.current += Math.round(pts * (1 + comboRef.current * 0.05));
+        setScore(scoreRef.current); setCombo(comboRef.current);
         break;
       }
     }
   }, []);
 
-  // ─── Game controls ────────────────────────────────────────────────────────────
+  // ── Game controls ─────────────────────────────────────────────────────────────
 
   const startGame = useCallback(() => {
     initAudio();
-    fallingNotesRef.current = [];
-    scoreRef.current = 0;
-    comboRef.current = 0;
-    maxComboRef.current = 0;
-    totalHitsRef.current = 0;
-    totalNotesRef.current = SONGS[selectedSong].notes.length;
-    noteIdRef.current = 0;
-    songRef.current = SONGS[selectedSong];
-    setScore(0);
-    setCombo(0);
-    setMaxCombo(0);
-    setAccuracy(100);
-    gameStateRef.current = "countdown";
-    setGameState("countdown");
-
-    let count = 3;
-    setCountdown(count);
-    const interval = setInterval(() => {
-      count--;
-      if (count <= 0) {
-        clearInterval(interval);
-        gameStartTimeRef.current = performance.now();
-        gameStateRef.current = "playing";
-        setGameState("playing");
+    fallingRef.current  = [];
+    scoreRef.current    = 0; comboRef.current = 0; maxComboRef.current = 0;
+    hitsRef.current     = 0; totalRef.current = SONGS[songIdx].notes.length;
+    noteIdRef.current   = 0; songRef.current  = SONGS[songIdx];
+    diffRef.current     = difficulty;
+    setScore(0); setCombo(0); setMaxCombo(0); setAccuracy(100);
+    gsRef.current = "countdown"; setGameState("countdown");
+    cdRef.current = 3; setCountdown(3);
+    let c = 3;
+    const iv = setInterval(() => {
+      c--;
+      if (c <= 0) {
+        clearInterval(iv);
+        startTimeRef.current = performance.now();
+        gsRef.current = "playing"; setGameState("playing");
       } else {
-        setCountdown(count);
+        cdRef.current = c; setCountdown(c);
       }
     }, 1000);
-  }, [selectedSong, initAudio]);
+  }, [songIdx, difficulty, initAudio]);
 
   const stopGame = useCallback(() => {
-    gameStateRef.current = "idle";
-    setGameState("idle");
-    fallingNotesRef.current = [];
+    gsRef.current = "idle"; setGameState("idle"); fallingRef.current = [];
   }, []);
 
-  // ─── Key input ────────────────────────────────────────────────────────────────
+  // ── Keyboard input ────────────────────────────────────────────────────────────
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+  const pressKey = useCallback((midi: number) => {
+    if (!ctxRef.current) initAudio();
+    playNote(midi); checkHit(midi);
+    pressedRef.current = new Set(Array.from(pressedRef.current).concat(midi));
+    setPressedKeys(new Set(pressedRef.current));
+  }, [initAudio, playNote, checkHit]);
+
+  const releaseKey = useCallback((midi: number) => {
+    stopNote(midi);
+    pressedRef.current = new Set(Array.from(pressedRef.current).filter(m => m !== midi));
+    setPressedKeys(new Set(pressedRef.current));
+  }, [stopNote]);
+
+  const onKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.repeat) return;
     if (e.key === " ") { e.preventDefault(); sustainRef.current = true; return; }
     const midi = KEY_MAP[e.key.toLowerCase()];
-    if (midi === undefined) return;
-    playNote(midi);
-    checkHit(midi);
-    pressedKeysRef.current = new Set(Array.from(pressedKeysRef.current).concat(midi));
-    setPressedKeys(new Set(pressedKeysRef.current));
-  }, [playNote, checkHit]);
+    if (midi !== undefined) pressKey(midi);
+  }, [pressKey]);
 
-  const handleKeyUp = useCallback((e: KeyboardEvent) => {
+  const onKeyUp = useCallback((e: KeyboardEvent) => {
     if (e.key === " ") {
       sustainRef.current = false;
-      sustainedNotesRef.current.forEach((m) => stopNote(m));
-      sustainedNotesRef.current.clear();
-      return;
+      sustainedRef.current.forEach(m => stopNote(m));
+      sustainedRef.current.clear(); return;
     }
     const midi = KEY_MAP[e.key.toLowerCase()];
-    if (midi === undefined) return;
-    stopNote(midi);
-    pressedKeysRef.current = new Set(Array.from(pressedKeysRef.current).filter((m) => m !== midi));
-    setPressedKeys(new Set(pressedKeysRef.current));
-  }, [stopNote]);
+    if (midi !== undefined) releaseKey(midi);
+  }, [releaseKey, stopNote]);
 
-  // ─── Piano mouse/touch input ──────────────────────────────────────────────────
+  // ── Piano mouse/touch ─────────────────────────────────────────────────────────
 
-  const getMidiFromCanvasPos = useCallback((canvas: HTMLCanvasElement, clientX: number, clientY: number): number | null => {
+  const midiFromPos = useCallback((clientX: number, clientY: number): number | null => {
+    const canvas = pianoRef.current;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     const x = (clientX - rect.left) * (canvas.width / rect.width);
-    const y = (clientY - rect.top) * (canvas.height / rect.height);
-    const layout = pianoLayoutRef.current;
-    if (!layout) return null;
-
-    // Check black keys first (they're on top)
-    const entries = Array.from(layout.keyRects.entries());
-    for (const [midi, kr] of entries) {
-      if (!kr.isBlack) continue;
-      if (x >= kr.x && x <= kr.x + kr.w && y >= kr.y && y <= kr.y + kr.h) return midi;
+    const y = (clientY - rect.top)  * (canvas.height / rect.height);
+    const layout = layoutRef.current;
+    // Black keys first
+    for (const [midi, r] of Array.from(layout.entries())) {
+      if (!r.isBlack) continue;
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return midi;
     }
-    // Then white keys
-    for (const [midi, kr] of entries) {
-      if (kr.isBlack) continue;
-      if (x >= kr.x && x <= kr.x + kr.w && y >= kr.y && y <= kr.y + kr.h) return midi;
+    for (const [midi, r] of Array.from(layout.entries())) {
+      if (r.isBlack) continue;
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return midi;
     }
     return null;
   }, []);
 
-  const pianoPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = pianoCanvasRef.current;
-    if (!canvas) return;
-    const midi = getMidiFromCanvasPos(canvas, e.clientX, e.clientY);
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const midi = midiFromPos(e.clientX, e.clientY);
     if (midi === null) return;
-    initAudio();
-    playNote(midi);
-    checkHit(midi);
-    pressedKeysRef.current = new Set(Array.from(pressedKeysRef.current).concat(midi));
-    setPressedKeys(new Set(pressedKeysRef.current));
-    canvas.setPointerCapture(e.pointerId);
-  }, [getMidiFromCanvasPos, initAudio, playNote, checkHit]);
+    pressKey(midi);
+    (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
+  }, [midiFromPos, pressKey]);
 
-  const pianoPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = pianoCanvasRef.current;
-    if (!canvas) return;
-    const midi = getMidiFromCanvasPos(canvas, e.clientX, e.clientY);
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const midi = midiFromPos(e.clientX, e.clientY);
     if (midi === null) {
-      // Release all
-      pressedKeysRef.current.forEach((m) => stopNote(m));
-      pressedKeysRef.current = new Set();
-      setPressedKeys(new Set());
-      return;
+      pressedRef.current.forEach(m => stopNote(m));
+      pressedRef.current = new Set(); setPressedKeys(new Set()); return;
     }
-    stopNote(midi);
-    pressedKeysRef.current = new Set(Array.from(pressedKeysRef.current).filter((m) => m !== midi));
-    setPressedKeys(new Set(pressedKeysRef.current));
-  }, [getMidiFromCanvasPos, stopNote]);
+    releaseKey(midi);
+  }, [midiFromPos, releaseKey, stopNote]);
 
-  // ─── Resize handler ───────────────────────────────────────────────────────────
+  // ── MIDI input ────────────────────────────────────────────────────────────────
 
-  const resizeCanvases = useCallback(() => {
-    const piano = pianoCanvasRef.current;
-    const dft = dftCanvasRef.current;
-    const highway = highwayCanvasRef.current;
-    if (!piano || !dft || !highway) return;
+  useEffect(() => {
+    if (!navigator.requestMIDIAccess) return;
+    navigator.requestMIDIAccess().then(access => {
+      setMidiConnected(access.inputs.size > 0);
+      const handleMsg = (e: MIDIMessageEvent) => {
+        if (!e.data) return;
+        const [status, note] = e.data;
+        const cmd = status & 0xf0;
+        if (note < KEYBOARD_START || note > KEYBOARD_END) return;
+        if (cmd === 0x90 && e.data[2] > 0) pressKey(note);
+        else if (cmd === 0x80 || (cmd === 0x90 && e.data[2] === 0)) releaseKey(note);
+      };
+      access.inputs.forEach(input => { input.onmidimessage = handleMsg; });
+      access.onstatechange = () => {
+        setMidiConnected(access.inputs.size > 0);
+        access.inputs.forEach(input => { input.onmidimessage = handleMsg; });
+      };
+    }).catch(() => {});
+  }, [pressKey, releaseKey]);
 
+  // ── Resize ────────────────────────────────────────────────────────────────────
+
+  const resize = useCallback(() => {
     const dpr = window.devicePixelRatio || 1;
-
-    // DFT canvas
-    const dftRect = dft.getBoundingClientRect();
-    dft.width = dftRect.width * dpr;
-    dft.height = dftRect.height * dpr;
-    const dftCtx = dft.getContext("2d");
-    if (dftCtx) dftCtx.scale(dpr, dpr);
-
-    // Highway canvas
-    const hwRect = highway.getBoundingClientRect();
-    highway.width = hwRect.width * dpr;
-    highway.height = hwRect.height * dpr;
-    const hwCtx = highway.getContext("2d");
-    if (hwCtx) hwCtx.scale(dpr, dpr);
-
-    // Piano canvas
-    const pianoRect = piano.getBoundingClientRect();
-    piano.width = pianoRect.width * dpr;
-    piano.height = pianoRect.height * dpr;
-    const pianoCtx = piano.getContext("2d");
-    if (pianoCtx) pianoCtx.scale(dpr, dpr);
-
-    // Recompute layout
-    computePianoLayout(piano);
-  }, [computePianoLayout]);
-
-  // ─── Lifecycle ────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    resizeCanvases();
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    const ro = new ResizeObserver(resizeCanvases);
-    if (pianoCanvasRef.current) ro.observe(pianoCanvasRef.current);
-    if (dftCanvasRef.current) ro.observe(dftCanvasRef.current);
-    if (highwayCanvasRef.current) ro.observe(highwayCanvasRef.current);
-
-    rafDftRef.current = requestAnimationFrame(drawDFT);
-    rafHighwayRef.current = requestAnimationFrame(drawHighway);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      ro.disconnect();
-      cancelAnimationFrame(rafDftRef.current);
-      cancelAnimationFrame(rafHighwayRef.current);
-      audioCtxRef.current?.close();
+    const setSize = (canvas: HTMLCanvasElement | null) => {
+      if (!canvas) return;
+      const r = canvas.getBoundingClientRect();
+      canvas.width  = r.width  * dpr;
+      canvas.height = r.height * dpr;
+      const c = canvas.getContext("2d");
+      if (c) c.scale(dpr, dpr);
     };
-  }, [handleKeyDown, handleKeyUp, drawDFT, drawHighway, resizeCanvases]);
+    setSize(dftRef.current);
+    setSize(hwRef.current);
+    setSize(pianoRef.current);
+    // Rebuild piano layout
+    const p = pianoRef.current;
+    if (p) layoutRef.current = buildPianoLayout(p.width / dpr, p.height / dpr);
+  }, []);
 
-  // Redraw piano when pressed keys change
+  // ── Lifecycle ─────────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    const canvas = pianoCanvasRef.current;
-    if (!canvas) return;
-    drawPiano(canvas, pressedKeys);
+    resize();
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup",   onKeyUp);
+    const ro = new ResizeObserver(resize);
+    [dftRef, hwRef, pianoRef].forEach(r => { if (r.current) ro.observe(r.current); });
+    rafDft.current = requestAnimationFrame(drawDFT);
+    rafHw.current  = requestAnimationFrame(drawHighway);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup",   onKeyUp);
+      ro.disconnect();
+      cancelAnimationFrame(rafDft.current);
+      cancelAnimationFrame(rafHw.current);
+      ctxRef.current?.close();
+    };
+  }, [onKeyDown, onKeyUp, drawDFT, drawHighway, resize]);
+
+  // Redraw piano on key press
+  useEffect(() => {
+    drawPiano(pressedKeys);
   }, [pressedKeys, drawPiano]);
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div
       className="flex flex-col h-full"
-      style={{ background: "#0a0f1e", color: "white", fontFamily: "'DM Sans', sans-serif" }}
+      style={{ background: "#0a0f1e", color: "white", fontFamily: "'DM Sans',sans-serif" }}
+      onClick={() => { if (!audioReady) initAudio(); }}
     >
-      {/* ── Header ── */}
+      {/* Header */}
       <div
-        className="flex items-center justify-between px-6 py-3 flex-shrink-0"
+        className="flex items-center gap-3 px-4 py-2 flex-shrink-0 flex-wrap"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", background: "#0d1526" }}
       >
-        <div>
-          <h1
-            className="text-lg font-bold"
-            style={{ fontFamily: "'DM Sans', sans-serif", color: "white", letterSpacing: "-0.01em" }}
-          >
+        <div className="mr-2">
+          <h1 className="text-base font-bold" style={{ letterSpacing: "-0.01em" }}>
             {t("pianoPracticeTitle")}
           </h1>
-          <p className="text-xs mt-0.5" style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}>
+          <p className="text-xs" style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono',monospace" }}>
             {t("pianoPracticeSubtitle")}
           </p>
         </div>
 
-        {/* Controls */}
-        <div className="flex items-center gap-3">
-          {/* Song selector */}
-          <select
-            value={selectedSong}
-            onChange={(e) => setSelectedSong(Number(e.target.value))}
-            disabled={gameState === "playing" || gameState === "countdown"}
-            className="text-xs px-3 py-1.5 rounded"
-            style={{
-              background: "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(255,255,255,0.15)",
-              color: "white",
-              fontFamily: "'IBM Plex Mono', monospace",
-              cursor: "pointer",
-            }}
+        {/* Song selector */}
+        <select
+          value={songIdx}
+          onChange={e => setSongIdx(Number(e.target.value))}
+          disabled={gameState === "playing" || gameState === "countdown"}
+          className="text-xs px-2 py-1 rounded"
+          style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", color:"white", fontFamily:"'IBM Plex Mono',monospace" }}
+        >
+          {SONGS.map((s, i) => <option key={i} value={i} style={{ background:"#1a2744" }}>{s.name}</option>)}
+        </select>
+
+        {/* Difficulty */}
+        <div className="flex gap-1">
+          {(Object.keys(DIFFICULTIES) as Difficulty[]).map(d => (
+            <button
+              key={d}
+              onClick={() => setDifficulty(d)}
+              disabled={gameState === "playing" || gameState === "countdown"}
+              className="text-xs px-2 py-1 rounded font-bold transition-all"
+              style={{
+                background: difficulty === d ? (d === "easy" ? "#22c55e" : d === "normal" ? "#00d4ff" : "#ef4444") : "rgba(255,255,255,0.06)",
+                color: difficulty === d ? "white" : "#8a9bb0",
+                border: "1px solid transparent",
+                fontFamily: "'IBM Plex Mono',monospace",
+              }}
+            >
+              {DIFFICULTIES[d].label}
+            </button>
+          ))}
+        </div>
+
+        {/* Start / Stop */}
+        {(gameState === "idle" || gameState === "finished") ? (
+          <button
+            onClick={startGame}
+            className="px-3 py-1 rounded text-xs font-bold"
+            style={{ background:"#ec4899", color:"white", fontFamily:"'IBM Plex Mono',monospace" }}
           >
-            {SONGS.map((s, i) => (
-              <option key={i} value={i} style={{ background: "#1a2744" }}>{s.name}</option>
-            ))}
-          </select>
+            {gameState === "finished" ? "PLAY AGAIN" : "START"}
+          </button>
+        ) : (
+          <button
+            onClick={stopGame}
+            className="px-3 py-1 rounded text-xs font-bold"
+            style={{ background:"rgba(236,72,153,0.15)", border:"1px solid rgba(236,72,153,0.4)", color:"#ec4899", fontFamily:"'IBM Plex Mono',monospace" }}
+          >
+            STOP
+          </button>
+        )}
 
-          {/* Start / Stop */}
-          {gameState === "idle" || gameState === "finished" ? (
-            <button
-              onClick={startGame}
-              className="px-4 py-1.5 rounded text-xs font-bold transition-all"
-              style={{
-                background: "#ec4899",
-                color: "white",
-                fontFamily: "'IBM Plex Mono', monospace",
-                letterSpacing: "0.05em",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#db2777")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#ec4899")}
-            >
-              {gameState === "finished" ? "PLAY AGAIN" : "START"}
-            </button>
-          ) : (
-            <button
-              onClick={stopGame}
-              className="px-4 py-1.5 rounded text-xs font-bold transition-all"
-              style={{
-                background: "rgba(236,72,153,0.2)",
-                border: "1px solid rgba(236,72,153,0.4)",
-                color: "#ec4899",
-                fontFamily: "'IBM Plex Mono', monospace",
-              }}
-            >
-              STOP
-            </button>
+        {/* Score */}
+        <div className="ml-auto flex items-center gap-3">
+          {midiConnected && (
+            <span className="text-xs px-2 py-0.5 rounded" style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.3)", color:"#22c55e", fontFamily:"'IBM Plex Mono',monospace" }}>
+              MIDI ●
+            </span>
           )}
-
-          {/* Score display */}
-          <div className="text-right" style={{ minWidth: 80 }}>
-            <div className="text-xs" style={{ color: "#8a9bb0", fontFamily: "'IBM Plex Mono', monospace" }}>SCORE</div>
-            <div className="text-lg font-bold" style={{ color: "#ec4899", fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1 }}>
-              {score.toLocaleString()}
-            </div>
-          </div>
-
-          {/* Combo */}
           {combo > 1 && (
-            <div
-              className="px-2 py-1 rounded text-xs font-bold"
-              style={{
-                background: "rgba(234,179,8,0.15)",
-                border: "1px solid rgba(234,179,8,0.3)",
-                color: "#eab308",
-                fontFamily: "'IBM Plex Mono', monospace",
-              }}
-            >
+            <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background:"rgba(234,179,8,0.15)", border:"1px solid rgba(234,179,8,0.3)", color:"#eab308", fontFamily:"'IBM Plex Mono',monospace" }}>
               ×{combo}
-            </div>
+            </span>
           )}
+          <div className="text-right">
+            <div className="text-xs" style={{ color:"#8a9bb0", fontFamily:"'IBM Plex Mono',monospace" }}>SCORE</div>
+            <div className="text-lg font-bold" style={{ color:"#ec4899", fontFamily:"'IBM Plex Mono',monospace", lineHeight:1 }}>{score.toLocaleString()}</div>
+          </div>
         </div>
       </div>
 
-      {/* ── Main area: DFT + Highway side by side ── */}
+      {/* Main: DFT left + Highway right */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left: DFT spectrum */}
+        {/* DFT panel */}
         <div
-          className="flex flex-col min-h-0"
-          style={{ width: "28%", borderRight: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, overflow: "hidden" }}
+          className="flex flex-col min-h-0 flex-shrink-0"
+          style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}
         >
-          <div
-            className="px-3 py-1.5 text-xs font-semibold flex-shrink-0"
-            style={{
-              color: "#00d4ff",
-              fontFamily: "'IBM Plex Mono', monospace",
-              letterSpacing: "0.08em",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-              background: "rgba(0,212,255,0.04)",
-            }}
-          >
+          <div className="px-3 py-1 text-xs font-semibold flex-shrink-0"
+            style={{ color:"#00d4ff", fontFamily:"'IBM Plex Mono',monospace", letterSpacing:"0.08em", borderBottom:"1px solid rgba(255,255,255,0.06)", background:"rgba(0,212,255,0.04)" }}>
             DFT SPECTRUM
           </div>
-          <canvas
-            ref={dftCanvasRef}
-            className="w-full"
-            style={{ display: "block", flex: "1 1 0", minHeight: 0 }}
-          />
-
-          {/* Stats panel below DFT */}
-          <div
-            className="flex-shrink-0 px-4 py-3 space-y-2"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "#0d1526" }}
-          >
-            <div className="flex justify-between text-xs" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-              <span style={{ color: "#8a9bb0" }}>ACCURACY</span>
-              <span style={{ color: accuracy >= 90 ? "#22c55e" : accuracy >= 70 ? "#eab308" : "#ef4444" }}>
-                {accuracy}%
-              </span>
-            </div>
-            <div className="flex justify-between text-xs" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-              <span style={{ color: "#8a9bb0" }}>MAX COMBO</span>
-              <span style={{ color: "#eab308" }}>×{maxCombo}</span>
-            </div>
-            <div className="flex justify-between text-xs" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-              <span style={{ color: "#8a9bb0" }}>SONG BPM</span>
-              <span style={{ color: "#00d4ff" }}>{SONGS[selectedSong].bpm}</span>
-            </div>
+          <canvas ref={dftRef} className="w-full" style={{ display:"block", flex:"1 1 0", minHeight:0 }} />
+          <div className="flex-shrink-0 px-3 py-2 space-y-1.5" style={{ borderTop:"1px solid rgba(255,255,255,0.06)", background:"#0d1526" }}>
+            {[["ACCURACY", `${accuracy}%`, accuracy >= 90 ? "#22c55e" : accuracy >= 70 ? "#eab308" : "#ef4444"],
+              ["MAX COMBO", `×${maxCombo}`, "#eab308"],
+              ["BPM", String(SONGS[songIdx].bpm), "#00d4ff"]].map(([k, v, c]) => (
+              <div key={k} className="flex justify-between text-xs" style={{ fontFamily:"'IBM Plex Mono',monospace" }}>
+                <span style={{ color:"#8a9bb0" }}>{k}</span>
+                <span style={{ color: c as string }}>{v}</span>
+              </div>
+            ))}
           </div>
-
-          {/* Keyboard hint */}
-          <div
-            className="flex-shrink-0 px-3 py-2 text-xs"
-            style={{
-              borderTop: "1px solid rgba(255,255,255,0.06)",
-              color: "rgba(138,155,176,0.6)",
-              fontFamily: "'IBM Plex Mono', monospace",
-              lineHeight: 1.6,
-              fontSize: 10,
-            }}
-          >
-            <div style={{ color: "rgba(236,72,153,0.7)", marginBottom: 4, fontWeight: "bold" }}>KEYBOARD MAP</div>
-            <div>Z–M · Oct 3 (C3–B3)</div>
-            <div>Q–U · Oct 4 (C4–B4)</div>
-            <div>I–P · Oct 5 (C5–B5)</div>
-            <div style={{ marginTop: 4 }}>SPACE · Sustain pedal</div>
+          <div className="flex-shrink-0 px-3 py-2 text-xs" style={{ borderTop:"1px solid rgba(255,255,255,0.06)", color:"rgba(138,155,176,0.55)", fontFamily:"'IBM Plex Mono',monospace", fontSize:9, lineHeight:1.7 }}>
+            <div style={{ color:"rgba(236,72,153,0.7)", fontWeight:"bold", marginBottom:2 }}>KEYBOARD MAP</div>
+            <div>Z–M · C3–B3</div>
+            <div>Q–U · C4–B4</div>
+            <div>I–P · C5–B5</div>
+            <div style={{ marginTop:3 }}>SPACE · Sustain</div>
+            {!audioReady && <div style={{ color:"#eab308", marginTop:4 }}>Click to unlock audio</div>}
           </div>
         </div>
 
-        {/* Right: Note highway */}
+        {/* Highway */}
         <div className="flex flex-col flex-1 min-w-0">
-          <div
-            className="px-3 py-1.5 text-xs font-semibold flex-shrink-0"
-            style={{
-              color: "#ec4899",
-              fontFamily: "'IBM Plex Mono', monospace",
-              letterSpacing: "0.08em",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-              background: "rgba(236,72,153,0.04)",
-            }}
-          >
-            NOTE HIGHWAY — {SONGS[selectedSong].name.toUpperCase()}
+          <div className="px-3 py-1 text-xs font-semibold flex-shrink-0"
+            style={{ color:"#ec4899", fontFamily:"'IBM Plex Mono',monospace", letterSpacing:"0.08em", borderBottom:"1px solid rgba(255,255,255,0.06)", background:"rgba(236,72,153,0.04)" }}>
+            NOTE HIGHWAY — {SONGS[songIdx].name.toUpperCase()}
           </div>
-          <canvas
-            ref={highwayCanvasRef}
-            className="flex-1 w-full"
-            style={{ display: "block" }}
-          />
+          <canvas ref={hwRef} className="flex-1 w-full" style={{ display:"block" }} />
         </div>
       </div>
 
-      {/* ── Piano keyboard ── */}
-      <div
-        className="flex-shrink-0"
-        style={{
-          height: 120,
-          borderTop: "2px solid rgba(236,72,153,0.3)",
-          background: "#0d1526",
-        }}
-      >
+      {/* Piano keyboard */}
+      <div className="flex-shrink-0" style={{ height: 110, borderTop: "2px solid rgba(236,72,153,0.3)", background: "#0d1526" }}>
         <canvas
-          ref={pianoCanvasRef}
+          ref={pianoRef}
           className="w-full h-full"
-          style={{ display: "block", cursor: "pointer" }}
-          onPointerDown={pianoPointerDown}
-          onPointerUp={pianoPointerUp}
-          onPointerLeave={pianoPointerUp}
+          style={{ display:"block", cursor:"pointer" }}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
         />
       </div>
     </div>
