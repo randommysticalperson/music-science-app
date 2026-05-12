@@ -224,14 +224,12 @@ export default function PianoPractice() {
   const [midiConn,    setMidiConn]    = useState(false);
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
   const [leadIn,      setLeadIn]      = useState<LeadInBeats>(4);
-  const [sheetMode,   setSheetMode]   = useState(false);
-  // keep sheetModeRef in sync so rAF closure can read it
-  useEffect(()=>{ sheetModeRef.current=sheetMode; },[sheetMode]);
+  // Score panel is always visible — no toggle needed
   const [sheetReady,  setSheetReady]  = useState(false);
   const leadInRef2    = useRef<LeadInBeats>(4);
   const sheetContRef  = useRef<HTMLDivElement>(null);
   const atApiRef      = useRef<alphaTab.AlphaTabApi|null>(null);
-  const sheetModeRef  = useRef(false);
+  const sheetModeRef  = useRef(true); // always on
 
   // Mutable refs
   const gsRef        = useRef<GameState>("idle");
@@ -475,19 +473,8 @@ export default function PianoPractice() {
     // beat is offset by leadIn so notes start arriving after the buffer
     const beat=elapsed*bps - leadInRef.current;
 
-    // ── Sync alphaTab cursor to game clock ──
-    // Only drive the cursor when the score panel is visible and the score is loaded.
-    // We compute song time in ms (clamped to 0) and set tickPosition so the
-    // alphaTab animated cursor scrolls in sync with the falling notes.
-    if (sheetModeRef.current && atApiRef.current) {
-      try {
-        const songMs = Math.max(0, elapsed - (leadInRef.current / bps)) * 1000;
-        const api = atApiRef.current as alphaTab.AlphaTabApi & { timePosition?: number };
-        if (typeof api.timePosition === "number") {
-          api.timePosition = songMs;
-        }
-      } catch { /* ignore if score not yet loaded */ }
-    }
+    // alphaTab plays independently once started — no manual tick sync needed
+    // (alphaTab's own player clock stays in sync with the soundfont playback)
     const diff=DIFFICULTIES[diffRef.current];
     const visBeats=diff.speed;
 
@@ -610,7 +597,7 @@ export default function PianoPractice() {
 
   // ── Game controls ─────────────────────────────────────────────────────────
 
-  const startGame=useCallback(()=>{
+   const startGame=useCallback(()=>{
     initAudio();
     fallingRef.current=[]; scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
     hitsRef.current=0; totalRef.current=SONGS[songIdx].notes.length;
@@ -622,13 +609,25 @@ export default function PianoPractice() {
     let c=3;
     const iv=setInterval(()=>{
       c--;
-      if (c<=0){clearInterval(iv);startTimeRef.current=performance.now();gsRef.current="playing";setGameState("playing");}
+      if (c<=0){
+        clearInterval(iv);
+        startTimeRef.current=performance.now();
+        gsRef.current="playing"; setGameState("playing");
+        // Start alphaTab playback from the beginning in sync with the highway
+        if (atApiRef.current) {
+          try {
+            atApiRef.current.tickPosition = 0;
+            atApiRef.current.play();
+          } catch { /* player may not be ready yet */ }
+        }
+      }
       else{cdRef.current=c;setCountdown(c);}
     },1000);
   },[songIdx,difficulty,initAudio]);
-
   const stopGame=useCallback(()=>{
     gsRef.current="idle"; setGameState("idle"); fallingRef.current=[];
+    // Stop alphaTab playback
+    if (atApiRef.current) { try { atApiRef.current.stop(); } catch {} }
   },[]);
 
   // ── Keyboard input ────────────────────────────────────────────────────────
@@ -750,7 +749,7 @@ export default function PianoPractice() {
 
   // ── alphaTab sheet music panel ────────────────────────────────────────────
   useEffect(()=>{
-    if (!sheetMode||!sheetContRef.current) return;
+    if (!sheetContRef.current) return;
     // Destroy previous instance
     if (atApiRef.current){try{atApiRef.current.destroy();}catch{} atApiRef.current=null;}
     setSheetReady(false);
@@ -775,13 +774,17 @@ export default function PianoPractice() {
     });
     const tex=SONG_ALPHATEX[songIdx]??SONG_ALPHATEX[0];
     api.tex(tex);
+    // Auto-play when game transitions to playing state
+    api.playerReady.on(()=>{
+      // Player is ready — playback will be triggered by startGame
+    });
     return ()=>{try{api.destroy();}catch{} atApiRef.current=null;};
-  },[sheetMode,songIdx]);
-
-  // Reload sheet when song changes while sheet mode is on
+  },[songIdx]);
+  // Reload sheet when song changes
   useEffect(()=>{
-    if (!sheetMode||!atApiRef.current) return;
+    if (!atApiRef.current) return;
     setSheetReady(false);
+    try { atApiRef.current.stop(); } catch {}
     const tex=SONG_ALPHATEX[songIdx]??SONG_ALPHATEX[0];
     atApiRef.current.tex(tex);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -831,16 +834,7 @@ export default function PianoPractice() {
           ))}
         </div>
 
-        {/* Sheet Music mode toggle */}
-        <button
-          onClick={()=>setSheetMode(s=>!s)}
-          className="text-xs px-2 py-1 rounded font-bold transition-all"
-          style={{
-            background:sheetMode?"rgba(168,85,247,0.25)":"rgba(255,255,255,0.05)",
-            border:sheetMode?"1px solid rgba(168,85,247,0.6)":"1px solid rgba(255,255,255,0.12)",
-            color:sheetMode?"#a855f7":"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",
-          }}
-        >🎼 SCORE</button>
+        {/* Score panel is always visible — no toggle */}
 
         {/* Difficulty */}
         <div className="flex gap-1">
@@ -891,23 +885,21 @@ export default function PianoPractice() {
         </div>
       </div>
 
-      {/* Sheet Music panel — shown above highway when sheetMode is on */}
-      {sheetMode&&(
-        <div className="flex-shrink-0 relative overflow-x-auto"
-          style={{height:180,borderBottom:"1px solid rgba(168,85,247,0.3)",background:"#f8f6f2"}}>
-          {!sheetReady&&(
-            <div className="absolute inset-0 flex items-center justify-center"
-              style={{background:"#f8f6f2",zIndex:10}}>
-              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>Loading score…</span>
-            </div>
-          )}
-          <div ref={sheetContRef} className="w-full h-full" style={{minWidth:"100%"}} />
-          <div className="absolute top-1 left-2 text-xs font-bold px-1.5 py-0.5 rounded"
-            style={{background:"rgba(168,85,247,0.15)",border:"1px solid rgba(168,85,247,0.4)",color:"#7c3aed",fontFamily:"'IBM Plex Mono',monospace",pointerEvents:"none"}}>
-            🎼 SCORE — {SONGS[songIdx].name}
+      {/* Sheet Music panel — always visible */}
+      <div className="flex-shrink-0 relative overflow-x-auto"
+        style={{height:200,borderBottom:"1px solid rgba(168,85,247,0.3)",background:"#f8f6f2"}}>
+        {!sheetReady&&(
+          <div className="absolute inset-0 flex items-center justify-center"
+            style={{background:"#f8f6f2",zIndex:10}}>
+            <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>Loading score…</span>
           </div>
+        )}
+        <div ref={sheetContRef} className="w-full h-full" style={{minWidth:"100%"}} />
+        <div className="absolute top-1 left-2 text-xs font-bold px-1.5 py-0.5 rounded"
+          style={{background:"rgba(168,85,247,0.15)",border:"1px solid rgba(168,85,247,0.4)",color:"#7c3aed",fontFamily:"'IBM Plex Mono',monospace",pointerEvents:"none"}}>
+          🎼 {SONGS[songIdx].name} — press START to play along
         </div>
-      )}
+      </div>
 
       {/* Highway — full width, DFT baked into background */}
       <div className="flex flex-col flex-1 min-h-0">
