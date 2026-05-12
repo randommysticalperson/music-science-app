@@ -367,43 +367,38 @@ export default function PianoPractice() {
     const layout=layoutRef.current;
     if (layout.size===0){rafHw.current=requestAnimationFrame(drawHighway);return;}
 
-    const HIT_Y=H*0.88;
-
-    // 2. DFT bars — drawn per-lane, each bar centred on the key's x position
+       // Notes rise from bottom → hit zone near top
+    const HIT_Y=H*0.12;
+    const TRAVEL=H-HIT_Y; // total travel distance (bottom to hit zone)
+    // 2. DFT bars — rise from HIT_Y downward (toward the piano keyboard)
     if (analyserRef.current && ctxRef.current) {
       const analyser=analyserRef.current;
       const bufLen=analyser.frequencyBinCount;
       const freqData=new Uint8Array(bufLen);
       analyser.getByteFrequencyData(freqData);
       const sr=ctxRef.current.sampleRate;
-
       layout.forEach((r, midi)=>{
-        // Map this key's fundamental frequency to an FFT bin
         const freq=noteFreq(midi);
         const bin=Math.round(freq/(sr/2)*bufLen);
-        // Average a small window of bins for stability
         let sum=0, cnt=0;
         for (let b=Math.max(0,bin-2); b<=Math.min(bufLen-1,bin+2); b++){
           sum+=freqData[b]; cnt++;
         }
         const v=(cnt>0?sum/cnt:0)/255;
         if (v<0.01) return;
-
         const col=LANE_COLORS[midi%12];
         const x=r.x;
         const bW=r.w;
-        const bH=v*HIT_Y*0.85;
-
-        // Gradient bar from hit zone upward
-        const g=ctx.createLinearGradient(x,HIT_Y-bH,x,HIT_Y);
-        g.addColorStop(0,col+"00");
-        g.addColorStop(0.4,col+"33");
-        g.addColorStop(1,col+"88");
+        const bH=v*TRAVEL*0.85;
+        // Gradient bar from hit zone downward
+        const g=ctx.createLinearGradient(x,HIT_Y,x,HIT_Y+bH);
+        g.addColorStop(0,col+"88");
+        g.addColorStop(0.6,col+"33");
+        g.addColorStop(1,col+"00");
         ctx.fillStyle=g;
-        ctx.fillRect(x,HIT_Y-bH,bW,bH);
-      });
+        ctx.fillRect(x,HIT_Y,bW,bH);
+       });
     }
-
     // 3. Lane dividers (white key boundaries)
     ctx.strokeStyle="rgba(255,255,255,0.05)"; ctx.lineWidth=1;
     layout.forEach((r,midi)=>{
@@ -413,14 +408,13 @@ export default function PianoPractice() {
       }
     });
 
-    // 4. Hit zone glow line
+    // 4. Hit zone glow line (near top)
     const hg=ctx.createLinearGradient(0,HIT_Y-3,0,HIT_Y+3);
     hg.addColorStop(0,"rgba(236,72,153,0)");
     hg.addColorStop(0.5,"rgba(236,72,153,0.9)");
     hg.addColorStop(1,"rgba(236,72,153,0)");
     ctx.fillStyle=hg; ctx.fillRect(0,HIT_Y-3,W,6);
-
-    // Hit zone circles
+    // Hit zone circles (at top)
     layout.forEach((r,midi)=>{
       const col=LANE_COLORS[midi%12];
       const cx=r.x+r.w/2, rad=r.w*(r.isBlack?0.35:0.38);
@@ -431,7 +425,7 @@ export default function PianoPractice() {
       if (!r.isBlack&&r.w>14){
         ctx.fillStyle=on?"white":`${col}80`;
         ctx.font=`bold ${Math.min(9,r.w*0.28)}px 'IBM Plex Mono',monospace`;
-        ctx.textAlign="center"; ctx.fillText(noteLabel(midi),cx,HIT_Y+3.5);
+        ctx.textAlign="center"; ctx.fillText(noteLabel(midi),cx,HIT_Y-4);
       }
     });
 
@@ -481,14 +475,14 @@ export default function PianoPractice() {
     // ── Lead-in overlay ──
     const leadInProgress = Math.max(0, Math.min(1, (leadInRef.current + beat) / leadInRef.current));
     if (leadInProgress < 1) {
-      // Shrinking progress bar across the top
+      // Shrinking progress bar across the bottom (notes rise from bottom)
       const barH = 6;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillRect(0, 0, W, barH);
+      ctx.fillRect(0, H - barH, W, barH);
       const g2 = ctx.createLinearGradient(0, 0, W, 0);
       g2.addColorStop(0, "#00d4ff"); g2.addColorStop(1, "#ec4899");
       ctx.fillStyle = g2;
-      ctx.fillRect(0, 0, W * leadInProgress, barH);
+      ctx.fillRect(0, H - barH, W * leadInProgress, barH);
       // "GET READY" text
       const alpha = leadInProgress < 0.85 ? 1 : (1 - leadInProgress) / 0.15;
       ctx.globalAlpha = alpha;
@@ -523,8 +517,9 @@ export default function PianoPractice() {
       const col=LANE_COLORS[fn.midi%12];
       const x=r.x, w=r.w;
       const beatsFromNow=fn.beatStart-beat;
-      const yTop=HIT_Y-(beatsFromNow/visBeats)*HIT_Y;
-      const noteH=Math.max((fn.beatDuration/visBeats)*HIT_Y,10);
+      // Notes rise from bottom: at beatsFromNow=0 → HIT_Y (top), at beatsFromNow=visBeats → H (bottom)
+      const yTop=HIT_Y+(beatsFromNow/visBeats)*TRAVEL;
+      const noteH=Math.max((fn.beatDuration/visBeats)*TRAVEL,10);
 
       if (fn.missed){
         ctx.fillStyle="rgba(80,80,100,0.35)";
