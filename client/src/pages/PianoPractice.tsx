@@ -12,35 +12,32 @@ import * as alphaTab from "@coderline/alphatab";
 
 const NOTE_NAMES    = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const BLACK_SEMIS   = new Set([1,3,6,8,10]);
-
-const KEYBOARD_START = 48; // C3
-const KEYBOARD_END   = 83; // B5
-const TOTAL_KEYS     = KEYBOARD_END - KEYBOARD_START + 1; // 36
-
+// Full 88-key concert grand: A0 (MIDI 21) – C8 (MIDI 108)
+const KEYBOARD_START = 21;  // A0
+const KEYBOARD_END   = 108; // C8
+const TOTAL_KEYS     = KEYBOARD_END - KEYBOARD_START + 1; // 88
 const isBlack    = (m: number) => BLACK_SEMIS.has(m % 12);
 const ALL_MIDIS  = Array.from({ length: TOTAL_KEYS }, (_, i) => KEYBOARD_START + i);
 const WHITE_MIDIS = ALL_MIDIS.filter(m => !isBlack(m));
-const WHITE_COUNT = WHITE_MIDIS.length; // 21
-
+const WHITE_COUNT = WHITE_MIDIS.length; // 52
 const noteFreq  = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 const noteLabel = (m: number) => NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
-
-// QWERTY → MIDI
+// QWERTY → MIDI (mapped to C3–B4 playable range, same as before)
 const KEY_MAP: Record<string, number> = {
   z:48,s:49,x:50,d:51,c:52,v:53,g:54,b:55,h:56,n:57,j:58,m:59,
   q:60,"2":61,w:62,"3":63,e:64,r:65,"5":66,t:67,"6":68,y:69,"7":70,u:71,
   i:72,"9":73,o:74,"0":75,p:76,
 };
-
 // Reverse map: MIDI number → keyboard label (uppercase for display)
 const MIDI_KEY_LABEL: Record<number, string> = {};
 Object.entries(KEY_MAP).forEach(([k, m]) => { MIDI_KEY_LABEL[m] = k.toUpperCase(); });
-
 const LANE_COLORS = [
   "#ec4899","#f97316","#eab308","#22c55e",
   "#00d4ff","#a855f7","#ec4899","#f97316",
   "#eab308","#22c55e","#00d4ff","#a855f7",
 ];
+// DFT energy per MIDI key — filled each rAF frame, read by drawPiano
+const dftKeyEnergy = new Float32Array(128); // index = midi number, value 0–1
 
 // ─── Lead-in buffer ──────────────────────────────────────────────────────────
 // After the countdown the highway scrolls empty for this many beats before
@@ -299,11 +296,20 @@ export default function PianoPractice() {
     layout.forEach((r,midi)=>{
       if (r.isBlack) return;
       const on=pressed.has(midi), col=LANE_COLORS[midi%12];
+      const energy=dftKeyEnergy[midi]||0;
       const g=ctx.createLinearGradient(r.x,0,r.x,r.h);
       if (on){g.addColorStop(0,col+"cc");g.addColorStop(1,col+"55");}
       else   {g.addColorStop(0,"#f8f6f2");g.addColorStop(1,"#e0dcd6");}
       ctx.fillStyle=g;
       ctx.beginPath();ctx.roundRect(r.x+1,0,r.w-2,r.h-2,[0,0,4,4]);ctx.fill();
+      // DFT energy glow — rises from bottom of key
+      if (energy>0.02 && !on){
+        const glowH=r.h*energy*0.85;
+        const eg=ctx.createLinearGradient(r.x,r.h,r.x,r.h-glowH);
+        eg.addColorStop(0,col+"99"); eg.addColorStop(1,col+"00");
+        ctx.fillStyle=eg;
+        ctx.beginPath();ctx.roundRect(r.x+1,r.h-glowH,r.w-2,glowH,[0,0,4,4]);ctx.fill();
+      }
       ctx.strokeStyle=on?col:"rgba(0,0,0,0.15)"; ctx.lineWidth=on?1.5:1;
       ctx.beginPath();ctx.roundRect(r.x+1,0,r.w-2,r.h-2,[0,0,4,4]);ctx.stroke();
       if (r.w>16){
@@ -330,11 +336,20 @@ export default function PianoPractice() {
     layout.forEach((r,midi)=>{
       if (!r.isBlack) return;
       const on=pressed.has(midi), col=LANE_COLORS[midi%12];
+      const energy=dftKeyEnergy[midi]||0;
       const g=ctx.createLinearGradient(r.x,0,r.x,r.h);
       if (on){g.addColorStop(0,col);g.addColorStop(1,col+"88");}
       else   {g.addColorStop(0,"#1a1a2e");g.addColorStop(1,"#0a0a18");}
       ctx.fillStyle=g;
       ctx.beginPath();ctx.roundRect(r.x,0,r.w,r.h,[0,0,3,3]);ctx.fill();
+      // DFT energy glow on black key — glows from bottom
+      if (energy>0.02 && !on){
+        const glowH=r.h*energy*0.9;
+        const eg=ctx.createLinearGradient(r.x,r.h,r.x,r.h-glowH);
+        eg.addColorStop(0,col+"cc"); eg.addColorStop(1,col+"00");
+        ctx.fillStyle=eg;
+        ctx.beginPath();ctx.roundRect(r.x,r.h-glowH,r.w,glowH,[0,0,3,3]);ctx.fill();
+      }
       if (on){
         ctx.strokeStyle=col;ctx.lineWidth=1.5;
         ctx.beginPath();ctx.roundRect(r.x,0,r.w,r.h,[0,0,3,3]);ctx.stroke();
@@ -373,6 +388,8 @@ export default function PianoPractice() {
     const HIT_Y=H*0.12;
     const TRAVEL=H-HIT_Y; // total travel distance (bottom to hit zone)
     // 2. DFT bars — rise from HIT_Y downward (toward the piano keyboard)
+    //    Also populate dftKeyEnergy[] so drawPiano can glow each key
+    dftKeyEnergy.fill(0);
     if (analyserRef.current && ctxRef.current) {
       const analyser=analyserRef.current;
       const bufLen=analyser.frequencyBinCount;
@@ -387,6 +404,8 @@ export default function PianoPractice() {
           sum+=freqData[b]; cnt++;
         }
         const v=(cnt>0?sum/cnt:0)/255;
+        // Store energy for piano key glow
+        if (midi>=0 && midi<128) dftKeyEnergy[midi]=v;
         if (v<0.01) return;
         const col=LANE_COLORS[midi%12];
         const x=r.x;
@@ -399,7 +418,7 @@ export default function PianoPractice() {
         g.addColorStop(1,col+"00");
         ctx.fillStyle=g;
         ctx.fillRect(x,HIT_Y,bW,bH);
-       });
+      });
     }
     // 3. Lane dividers (white key boundaries)
     ctx.strokeStyle="rgba(255,255,255,0.05)"; ctx.lineWidth=1;
@@ -621,9 +640,10 @@ export default function PianoPractice() {
       setAccuracy(totalRef.current>0?Math.round(hitsRef.current/totalRef.current*100):100);
     }
 
+     // Redraw piano every frame so DFT energy glow animates continuously
+    drawPiano(pressedRef.current);
     rafHw.current=requestAnimationFrame(drawHighway);
-  },[]);
-
+  },[drawPiano]);
   // ── Hit detection ─────────────────────────────────────────────────────────
 
   const checkHit=useCallback((midi:number)=>{
