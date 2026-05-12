@@ -37,6 +37,11 @@ const LANE_COLORS = [
   "#eab308","#22c55e","#00d4ff","#a855f7",
 ];
 
+// ─── Lead-in buffer ──────────────────────────────────────────────────────────
+// After the countdown the highway scrolls empty for this many beats before
+// the first note reaches the hit zone, giving the player time to get ready.
+const LEAD_IN_BEATS = 4;
+
 // ─── Difficulty ───────────────────────────────────────────────────────────────
 
 const DIFFICULTIES = {
@@ -202,7 +207,8 @@ export default function PianoPractice() {
   const hitsRef      = useRef(0);
   const totalRef     = useRef(0);
   const pressedRef   = useRef<Set<number>>(new Set());
-  const startTimeRef = useRef(0);
+  const startTimeRef   = useRef(0);
+  const leadInRef       = useRef(LEAD_IN_BEATS); // beats of lead-in remaining
   const songRef      = useRef<Song>(SONGS[0]);
   const diffRef      = useRef<Difficulty>("normal");
   const noteIdRef    = useRef(0);
@@ -408,9 +414,34 @@ export default function PianoPractice() {
     const now=performance.now();
     const elapsed=(now-startTimeRef.current)/1000;
     const bps=songRef.current.bpm/60;
-    const beat=elapsed*bps;
+    // beat is offset by LEAD_IN_BEATS so notes start arriving after the buffer
+    const beat=elapsed*bps - LEAD_IN_BEATS;
     const diff=DIFFICULTIES[diffRef.current];
     const visBeats=diff.speed;
+
+    // ── Lead-in overlay ──
+    const leadInProgress = Math.max(0, Math.min(1, (LEAD_IN_BEATS + beat) / LEAD_IN_BEATS));
+    if (leadInProgress < 1) {
+      // Shrinking progress bar across the top
+      const barH = 6;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(0, 0, W, barH);
+      const g2 = ctx.createLinearGradient(0, 0, W, 0);
+      g2.addColorStop(0, "#00d4ff"); g2.addColorStop(1, "#ec4899");
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, W * leadInProgress, barH);
+      // "GET READY" text
+      const alpha = leadInProgress < 0.85 ? 1 : (1 - leadInProgress) / 0.15;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "white";
+      ctx.font = "bold 22px 'DM Sans',sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("GET READY", W / 2, H / 2 - 12);
+      ctx.font = "12px 'IBM Plex Mono',monospace";
+      ctx.fillStyle = "rgba(0,212,255,0.9)";
+      const beatsLeft = Math.ceil(Math.max(0, -beat));
+      ctx.fillText(beatsLeft > 0 ? `${beatsLeft} beat${beatsLeft > 1 ? "s" : ""} to first note` : "Here it comes!", W / 2, H / 2 + 12);
+      ctx.globalAlpha = 1;
+    }
 
     // Spawn notes
     for (const sn of songRef.current.notes){
@@ -489,7 +520,7 @@ export default function PianoPractice() {
   const checkHit=useCallback((midi:number)=>{
     if (gsRef.current!=="playing") return;
     const bps=songRef.current.bpm/60;
-    const beat=((performance.now()-startTimeRef.current)/1000)*bps;
+    const beat=((performance.now()-startTimeRef.current)/1000)*bps - LEAD_IN_BEATS;
     const win=DIFFICULTIES[diffRef.current].hitWindow;
     for (const fn of fallingRef.current){
       if (fn.midi!==midi||fn.hit||fn.missed) continue;
@@ -512,6 +543,7 @@ export default function PianoPractice() {
     fallingRef.current=[]; scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
     hitsRef.current=0; totalRef.current=SONGS[songIdx].notes.length;
     noteIdRef.current=0; songRef.current=SONGS[songIdx]; diffRef.current=difficulty;
+    leadInRef.current=LEAD_IN_BEATS;
     setScore(0); setCombo(0); setMaxCombo(0); setAccuracy(100);
     gsRef.current="countdown"; setGameState("countdown");
     cdRef.current=3; setCountdown(3);
