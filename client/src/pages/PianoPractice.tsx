@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLang } from "../contexts/LanguageContext";
 import * as alphaTab from "@coderline/alphatab";
+import { AbcImportModal } from "@/components/AbcImportModal";
+import { type ParsedDuet } from "@/lib/abcParser";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -319,6 +321,27 @@ export default function PianoPractice() {
   const isDuetRef     = useRef(false);
   const duetIdxRef    = useRef(0);
   const aiTimersRef   = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // ABC import modal & custom duets
+  const [showAbcModal, setShowAbcModal] = useState(false);
+  const [customDuets,  setCustomDuets]  = useState<DuetSong[]>([]);
+  const allDuetSongs = [...DUET_SONGS, ...customDuets];
+
+  function handleAbcImport(parsed: ParsedDuet) {
+    const newDuet: DuetSong = {
+      name: parsed.name,
+      bpm:  parsed.bpm,
+      ai:   parsed.voice2,
+      user: parsed.voice1,
+    };
+    setCustomDuets(prev => {
+      const updated = [...prev, newDuet];
+      const newIdx = DUET_SONGS.length + updated.length - 1;
+      setDuetIdx(newIdx);
+      duetIdxRef.current = newIdx;
+      return updated;
+    });
+  }
+
   // Score panel is always visible — no toggle needed
   const [sheetReady,  setSheetReady]  = useState(false);
   const leadInRef2    = useRef<LeadInBeats>(4);
@@ -796,7 +819,7 @@ export default function PianoPractice() {
     // Clear any previous AI timers
     aiTimersRef.current.forEach(t=>clearTimeout(t)); aiTimersRef.current=[];
     const duet=isDuetRef.current;
-    const duetSong=DUET_SONGS[duetIdxRef.current];
+    const duetSong=allDuetSongs[duetIdxRef.current];
     const activeSong=duet?{name:duetSong.name,bpm:duetSong.bpm,notes:duetSong.user}:SONGS[songIdx];
     fallingRef.current=[]; scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
     hitsRef.current=0; totalRef.current=activeSong.notes.length;
@@ -1008,6 +1031,8 @@ export default function PianoPractice() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
+    <AbcImportModal open={showAbcModal} onClose={()=>setShowAbcModal(false)} onImport={handleAbcImport}/>
     <div
       className="flex flex-col h-full"
       style={{background:"#0a0f1e",color:"white",fontFamily:"'DM Sans',sans-serif"}}
@@ -1037,6 +1062,19 @@ export default function PianoPractice() {
             color:isDuet?"#a855f7":"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",
           }}
         >🎹 二重奏</button>
+        {/* ABC import button — only shown in duet mode */}
+        {isDuet&&(
+          <button
+            onClick={()=>setShowAbcModal(true)}
+            disabled={gameState==="playing"||gameState==="countdown"}
+            className="text-xs px-2 py-1 rounded font-bold transition-all"
+            style={{
+              background:"rgba(0,212,255,0.12)",
+              border:"1px solid rgba(0,212,255,0.35)",
+              color:"#00d4ff",fontFamily:"'IBM Plex Mono',monospace",
+            }}
+          >+ ABC</button>
+        )}
         {/* Song selector — changes based on mode */}
         {isDuet?(
           <select
@@ -1045,7 +1083,7 @@ export default function PianoPractice() {
             className="text-xs px-2 py-1 rounded"
             style={{background:"rgba(168,85,247,0.12)",border:"1px solid rgba(168,85,247,0.3)",color:"#a855f7",fontFamily:"'IBM Plex Mono',monospace"}}
           >
-            {DUET_SONGS.map((s,i)=><option key={i} value={i} style={{background:"#1a2744"}}>{s.name}</option>)}
+            {allDuetSongs.map((s,i)=><option key={i} value={i} style={{background:"#1a2744"}}>{s.name}{i>=DUET_SONGS.length?" ✦":""}</option>)}
           </select>
         ):(
           <select
@@ -1241,5 +1279,6 @@ export default function PianoPractice() {
         />
       </div>
     </div>
+    </>
   );
 }
