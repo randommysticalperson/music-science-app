@@ -71,9 +71,9 @@ const SONG_ALPHATEX: Record<number, string> = {
 // ─── Difficulty ───────────────────────────────────────────────────────────────
 
 const DIFFICULTIES = {
-  easy:   { label:"EASY",   hitWindow:0.6, speed:3 },
-  normal: { label:"NORMAL", hitWindow:0.4, speed:4 },
-  hard:   { label:"HARD",   hitWindow:0.2, speed:6 },
+  easy:   { label:"EASY",   hitWindow:0.9, speed:2.5 },
+  normal: { label:"NORMAL", hitWindow:0.65, speed:3.5 },
+  hard:   { label:"HARD",   hitWindow:0.35, speed:5 },
 } as const;
 type Difficulty = keyof typeof DIFFICULTIES;
 
@@ -159,6 +159,85 @@ const SONGS: Song[] = [
   ]},
 ];
 
+// ─── Duet songs ─────────────────────────────────────────────────────────────
+// Each duet song has two parts: `ai` (auto-played by the computer) and
+// `user` (shown on the highway for the player to hit).
+interface DuetSong {
+  name: string;
+  bpm: number;
+  ai: SongNote[];   // AI plays these automatically
+  user: SongNote[]; // User plays these on the highway
+}
+const DUET_SONGS: DuetSong[] = [
+  { name:"Ode to Joy (Duet)", bpm:100,
+    // AI: left-hand accompaniment (bass/chord)
+    ai:[
+      {midi:48,beat:0,duration:2},{midi:52,beat:0,duration:2},{midi:55,beat:0,duration:2},
+      {midi:48,beat:2,duration:2},{midi:52,beat:2,duration:2},{midi:55,beat:2,duration:2},
+      {midi:45,beat:4,duration:2},{midi:48,beat:4,duration:2},{midi:52,beat:4,duration:2},
+      {midi:45,beat:6,duration:2},{midi:48,beat:6,duration:2},{midi:52,beat:6,duration:2},
+      {midi:48,beat:8,duration:2},{midi:52,beat:8,duration:2},{midi:55,beat:8,duration:2},
+      {midi:48,beat:10,duration:2},{midi:52,beat:10,duration:2},{midi:55,beat:10,duration:2},
+      {midi:48,beat:12,duration:2},{midi:52,beat:12,duration:2},{midi:55,beat:12,duration:2},
+      {midi:43,beat:14,duration:2},{midi:47,beat:14,duration:2},{midi:50,beat:14,duration:2},
+    ],
+    // User: right-hand melody
+    user:[
+      {midi:64,beat:0,duration:1},{midi:64,beat:1,duration:1},
+      {midi:65,beat:2,duration:1},{midi:67,beat:3,duration:1},
+      {midi:67,beat:4,duration:1},{midi:65,beat:5,duration:1},
+      {midi:64,beat:6,duration:1},{midi:62,beat:7,duration:1},
+      {midi:60,beat:8,duration:1},{midi:60,beat:9,duration:1},
+      {midi:62,beat:10,duration:1},{midi:64,beat:11,duration:1},
+      {midi:64,beat:12,duration:1.5},{midi:62,beat:13.5,duration:0.5},{midi:62,beat:14,duration:2},
+    ],
+  },
+  { name:"Twinkle Twinkle (Duet)", bpm:110,
+    ai:[
+      {midi:48,beat:0,duration:2},{midi:52,beat:0,duration:2},
+      {midi:55,beat:2,duration:2},{midi:52,beat:2,duration:2},
+      {midi:57,beat:4,duration:2},{midi:52,beat:4,duration:2},
+      {midi:55,beat:6,duration:2},{midi:52,beat:6,duration:2},
+      {midi:53,beat:8,duration:2},{midi:50,beat:8,duration:2},
+      {midi:52,beat:10,duration:2},{midi:48,beat:10,duration:2},
+      {midi:50,beat:12,duration:2},{midi:47,beat:12,duration:2},
+      {midi:48,beat:14,duration:2},{midi:45,beat:14,duration:2},
+    ],
+    user:[
+      {midi:60,beat:0,duration:1},{midi:60,beat:1,duration:1},
+      {midi:67,beat:2,duration:1},{midi:67,beat:3,duration:1},
+      {midi:69,beat:4,duration:1},{midi:69,beat:5,duration:1},{midi:67,beat:6,duration:2},
+      {midi:65,beat:8,duration:1},{midi:65,beat:9,duration:1},
+      {midi:64,beat:10,duration:1},{midi:64,beat:11,duration:1},
+      {midi:62,beat:12,duration:1},{midi:62,beat:13,duration:1},{midi:60,beat:14,duration:2},
+    ],
+  },
+  { name:"Jingle Bells (Duet)", bpm:130,
+    ai:[
+      {midi:48,beat:0,duration:1},{midi:52,beat:0,duration:1},{midi:55,beat:0,duration:1},
+      {midi:48,beat:1,duration:1},{midi:52,beat:1,duration:1},{midi:55,beat:1,duration:1},
+      {midi:48,beat:2,duration:1},{midi:52,beat:2,duration:1},{midi:55,beat:2,duration:1},
+      {midi:48,beat:3,duration:1},{midi:52,beat:3,duration:1},{midi:55,beat:3,duration:1},
+      {midi:43,beat:4,duration:2},{midi:47,beat:4,duration:2},{midi:50,beat:4,duration:2},
+      {midi:43,beat:6,duration:2},{midi:47,beat:6,duration:2},{midi:50,beat:6,duration:2},
+      {midi:41,beat:8,duration:2},{midi:45,beat:8,duration:2},{midi:48,beat:8,duration:2},
+      {midi:41,beat:10,duration:2},{midi:45,beat:10,duration:2},{midi:48,beat:10,duration:2},
+      {midi:43,beat:12,duration:2},{midi:47,beat:12,duration:2},{midi:50,beat:12,duration:2},
+      {midi:43,beat:14,duration:2},{midi:47,beat:14,duration:2},{midi:50,beat:14,duration:2},
+    ],
+    user:[
+      {midi:64,beat:0,duration:0.5},{midi:64,beat:0.5,duration:0.5},{midi:64,beat:1,duration:1},
+      {midi:64,beat:2,duration:0.5},{midi:64,beat:2.5,duration:0.5},{midi:64,beat:3,duration:1},
+      {midi:64,beat:4,duration:0.5},{midi:67,beat:4.5,duration:0.5},{midi:60,beat:5,duration:0.5},
+      {midi:62,beat:5.5,duration:0.5},{midi:64,beat:6,duration:2},
+      {midi:65,beat:8,duration:0.5},{midi:65,beat:8.5,duration:0.5},{midi:65,beat:9,duration:0.5},{midi:65,beat:9.5,duration:0.5},
+      {midi:65,beat:10,duration:0.5},{midi:64,beat:10.5,duration:0.5},{midi:64,beat:11,duration:0.5},{midi:64,beat:11.5,duration:0.5},
+      {midi:64,beat:12,duration:0.5},{midi:62,beat:12.5,duration:0.5},{midi:62,beat:13,duration:0.5},
+      {midi:64,beat:13.5,duration:0.5},{midi:62,beat:14,duration:1},{midi:67,beat:15,duration:1},
+    ],
+  },
+];
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type GameState = "idle"|"countdown"|"playing"|"finished";
@@ -234,6 +313,12 @@ export default function PianoPractice() {
   const viewStartRef = useRef(KEYBOARD_START);
   const viewEndRef   = useRef(KEYBOARD_END);
   const [leadIn,      setLeadIn]      = useState<LeadInBeats>(4);
+  // Duet mode
+  const [isDuet,      setIsDuet]      = useState(false);
+  const [duetIdx,     setDuetIdx]     = useState(0);
+  const isDuetRef     = useRef(false);
+  const duetIdxRef    = useRef(0);
+  const aiTimersRef   = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Score panel is always visible — no toggle needed
   const [sheetReady,  setSheetReady]  = useState(false);
   const leadInRef2    = useRef<LeadInBeats>(4);
@@ -695,10 +780,10 @@ export default function PianoPractice() {
       const d=Math.abs(fn.beatStart-beat);
       if (d<=win){
         fn.hit=true; fn.hitTime=performance.now(); hitsRef.current++;
-        const pts=d<win*0.25?100:d<win*0.6?70:40;
+        const pts=d<win*0.25?100:d<win*0.6?80:60; // forgiving: min 60pts
         comboRef.current++;
         if (comboRef.current>maxComboRef.current) maxComboRef.current=comboRef.current;
-        scoreRef.current+=Math.round(pts*(1+comboRef.current*0.05));
+        scoreRef.current+=Math.round(pts*(1+comboRef.current*0.08)); // bigger combo bonus
         setScore(scoreRef.current); setCombo(comboRef.current); break;
       }
     }
@@ -708,9 +793,14 @@ export default function PianoPractice() {
 
    const startGame=useCallback(()=>{
     initAudio();
+    // Clear any previous AI timers
+    aiTimersRef.current.forEach(t=>clearTimeout(t)); aiTimersRef.current=[];
+    const duet=isDuetRef.current;
+    const duetSong=DUET_SONGS[duetIdxRef.current];
+    const activeSong=duet?{name:duetSong.name,bpm:duetSong.bpm,notes:duetSong.user}:SONGS[songIdx];
     fallingRef.current=[]; scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
-    hitsRef.current=0; totalRef.current=SONGS[songIdx].notes.length;
-    noteIdRef.current=0; songRef.current=SONGS[songIdx]; diffRef.current=difficulty;
+    hitsRef.current=0; totalRef.current=activeSong.notes.length;
+    noteIdRef.current=0; songRef.current=activeSong; diffRef.current=difficulty;
     leadInRef.current=leadInRef2.current;
     setScore(0); setCombo(0); setMaxCombo(0); setAccuracy(100);
     gsRef.current="countdown"; setGameState("countdown");
@@ -729,12 +819,25 @@ export default function PianoPractice() {
             atApiRef.current.play();
           } catch { /* player may not be ready yet */ }
         }
+        // Schedule AI notes for duet mode
+        if (duet){
+          const bps=duetSong.bpm/60;
+          const leadInSec=leadInRef.current/bps;
+          duetSong.ai.forEach(n=>{
+            const delayMs=(n.beat/bps+leadInSec)*1000;
+            const durationMs=(n.duration/bps)*1000;
+            const t1=setTimeout(()=>{ playNote(n.midi); },delayMs);
+            const t2=setTimeout(()=>{ stopNote(n.midi); },delayMs+durationMs);
+            aiTimersRef.current.push(t1,t2);
+          });
+        }
       }
       else{cdRef.current=c;setCountdown(c);}
     },1000);
-  },[songIdx,difficulty,initAudio]);
+  },[songIdx,difficulty,initAudio,playNote,stopNote]);
   const stopGame=useCallback(()=>{
     gsRef.current="idle"; setGameState("idle"); fallingRef.current=[];
+    aiTimersRef.current.forEach(t=>clearTimeout(t)); aiTimersRef.current=[];
     // Stop alphaTab playback
     if (atApiRef.current) { try { atApiRef.current.stop(); } catch {} }
   },[]);
@@ -920,15 +1023,40 @@ export default function PianoPractice() {
           <p className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>{t("pianoPracticeSubtitle")}</p>
         </div>
 
-        {/* Song */}
-        <select
-          value={songIdx} onChange={e=>setSongIdx(Number(e.target.value))}
+        {/* Duet toggle */}
+        <button
+          onClick={()=>{
+            const next=!isDuet;
+            setIsDuet(next); isDuetRef.current=next;
+          }}
           disabled={gameState==="playing"||gameState==="countdown"}
-          className="text-xs px-2 py-1 rounded"
-          style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"white",fontFamily:"'IBM Plex Mono',monospace"}}
-        >
-          {SONGS.map((s,i)=><option key={i} value={i} style={{background:"#1a2744"}}>{s.name}</option>)}
-        </select>
+          className="text-xs px-2 py-1 rounded font-bold transition-all flex items-center gap-1"
+          style={{
+            background:isDuet?"rgba(168,85,247,0.25)":"rgba(255,255,255,0.06)",
+            border:isDuet?"1px solid rgba(168,85,247,0.6)":"1px solid rgba(255,255,255,0.1)",
+            color:isDuet?"#a855f7":"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",
+          }}
+        >🎹 二重奏</button>
+        {/* Song selector — changes based on mode */}
+        {isDuet?(
+          <select
+            value={duetIdx} onChange={e=>{const v=Number(e.target.value);setDuetIdx(v);duetIdxRef.current=v;}}
+            disabled={gameState==="playing"||gameState==="countdown"}
+            className="text-xs px-2 py-1 rounded"
+            style={{background:"rgba(168,85,247,0.12)",border:"1px solid rgba(168,85,247,0.3)",color:"#a855f7",fontFamily:"'IBM Plex Mono',monospace"}}
+          >
+            {DUET_SONGS.map((s,i)=><option key={i} value={i} style={{background:"#1a2744"}}>{s.name}</option>)}
+          </select>
+        ):(
+          <select
+            value={songIdx} onChange={e=>setSongIdx(Number(e.target.value))}
+            disabled={gameState==="playing"||gameState==="countdown"}
+            className="text-xs px-2 py-1 rounded"
+            style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"white",fontFamily:"'IBM Plex Mono',monospace"}}
+          >
+            {SONGS.map((s,i)=><option key={i} value={i} style={{background:"#1a2744"}}>{s.name}</option>)}
+          </select>
+        )}
 
         {/* Lead-in selector */}
         <div className="flex items-center gap-1">
@@ -1079,9 +1207,12 @@ export default function PianoPractice() {
               <div className="text-center px-8 py-6 rounded-xl"
                 style={{background:"rgba(15,20,40,0.95)",border:"1px solid rgba(236,72,153,0.4)",boxShadow:"0 0 40px rgba(236,72,153,0.2)"}}>
                 <div className="text-4xl font-black mb-1" style={{color:"#ec4899",fontFamily:"'DM Sans',sans-serif"}}>
-                  {accuracy>=95?"S":accuracy>=80?"A":accuracy>=60?"B":"C"}
+                  {accuracy>=90?"S":accuracy>=70?"A":accuracy>=45?"B":"C"}
                 </div>
-                <div className="text-xs mb-4" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>GRADE</div>
+                <div className="text-xs mb-1" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>GRADE</div>
+                <div className="text-sm font-semibold mb-4" style={{color:"#00d4ff",fontFamily:"'DM Sans',sans-serif"}}>
+                  {accuracy>=90?"🎹 Brilliant! Keep it up!":accuracy>=70?"🎵 Great job! You're improving!":accuracy>=45?"👍 Nice try! Practice makes perfect!":"💪 Keep going — you'll get it!"}
+                </div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs mb-5" style={{fontFamily:"'IBM Plex Mono',monospace"}}>
                   <span style={{color:"#8a9bb0"}}>ACCURACY</span>
                   <span className="font-bold" style={{color:"#00d4ff"}}>{accuracy}%</span>

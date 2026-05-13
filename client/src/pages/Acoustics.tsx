@@ -159,7 +159,7 @@ function dopplerFrequency(
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type AcTab = "waves" | "doppler" | "decibels" | "resonance" | "history";
+type AcTab = "waves" | "doppler" | "decibels" | "resonance" | "history" | "phonon";
 
 export default function Acoustics() {
   const [activeTab, setActiveTab] = useState<AcTab>("waves");
@@ -232,6 +232,7 @@ export default function Acoustics() {
     { id: "decibels", label: t("acDbTitle") },
     { id: "resonance", label: t("acResonanceTitle") },
     { id: "history", label: t("acHistoryTitle") },
+    { id: "phonon", label: "🔬 Phonon" },
   ];
 
   return (
@@ -915,6 +916,202 @@ export default function Acoustics() {
             ))}
           </div>
         )}
+
+        {/* ── Phonon Scattering ───────────────────────────────────────── */}
+        {activeTab === "phonon" && <PhononScattering />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Phonon Scattering Component ─────────────────────────────────────────────
+
+interface Phonon {
+  x: number; y: number;
+  vx: number; vy: number;
+  energy: number;
+  radius: number;
+  scatterTimer: number;
+  trail: {x:number;y:number}[];
+}
+interface Defect {
+  x: number; y: number;
+  radius: number;
+  type: "vacancy" | "impurity" | "grain";
+}
+
+function PhononScattering() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const phononsRef = useRef<Phonon[]>([]);
+  const defectsRef = useRef<Defect[]>([]);
+  const [temp, setTemp] = useState(300);
+  const [defectDensity, setDefectDensity] = useState(12);
+  const [paused, setPaused] = useState(false);
+  const pausedRef  = useRef(false);
+  const tempRef    = useRef(300);
+  const defDenRef  = useRef(12);
+  const [scatterCount, setScatterCount] = useState(0);
+  const scatterRef = useRef(0);
+  const PHONON_COUNT = 40;
+  const TRAIL_LEN = 18;
+
+  const initSim = useCallback((W:number, H:number) => {
+    phononsRef.current = Array.from({length: PHONON_COUNT}, () => {
+      const energy = 0.3 + Math.random() * 0.7;
+      const speed  = 1.2 + energy * 2.5 * (tempRef.current / 300);
+      const angle  = (Math.random() - 0.5) * 0.8;
+      return { x: Math.random()*W*0.15, y: Math.random()*H,
+        vx: speed*Math.cos(angle), vy: speed*Math.sin(angle),
+        energy, radius: 3+energy*4, scatterTimer: 500+Math.random()*1500, trail: [] };
+    });
+    defectsRef.current = Array.from({length: defDenRef.current}, (_,i) => ({
+      x: W*(0.15+Math.random()*0.7), y: Math.random()*H,
+      radius: 6+Math.random()*10,
+      type: (["vacancy","impurity","grain"] as const)[i%3],
+    }));
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const W = canvas.offsetWidth, H = canvas.offsetHeight;
+    canvas.width = W*(window.devicePixelRatio||1);
+    canvas.height = H*(window.devicePixelRatio||1);
+    const ctx = canvas.getContext("2d")!;
+    ctx.scale(window.devicePixelRatio||1, window.devicePixelRatio||1);
+    initSim(W, H);
+    scatterRef.current = 0; setScatterCount(0);
+    const draw = () => {
+      if (!pausedRef.current) {
+        ctx.fillStyle = "rgba(8,12,28,0.35)"; ctx.fillRect(0,0,W,H);
+        const grad = ctx.createLinearGradient(0,0,W,0);
+        grad.addColorStop(0,"rgba(236,72,153,0.08)"); grad.addColorStop(1,"rgba(0,212,255,0.04)");
+        ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+        // Lattice
+        const sp=28;
+        for (let gx=sp/2;gx<W;gx+=sp) for (let gy=sp/2;gy<H;gy+=sp) {
+          ctx.beginPath(); ctx.arc(gx,gy,2.5,0,Math.PI*2);
+          ctx.fillStyle="rgba(100,130,180,0.35)"; ctx.fill();
+          ctx.strokeStyle="rgba(100,130,180,0.12)"; ctx.lineWidth=0.5;
+          ctx.beginPath(); ctx.moveTo(gx,gy); ctx.lineTo(gx+sp,gy); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(gx,gy); ctx.lineTo(gx,gy+sp); ctx.stroke();
+        }
+        // Defects
+        defectsRef.current.forEach(d=>{
+          ctx.save(); ctx.shadowBlur=12;
+          if (d.type==="vacancy"){
+            ctx.shadowColor="#ef4444"; ctx.strokeStyle="rgba(239,68,68,0.7)"; ctx.lineWidth=2;
+            ctx.beginPath(); ctx.arc(d.x,d.y,d.radius,0,Math.PI*2); ctx.stroke();
+            ctx.strokeStyle="rgba(239,68,68,0.3)"; ctx.lineWidth=1;
+            ctx.beginPath(); ctx.moveTo(d.x-d.radius*0.6,d.y-d.radius*0.6); ctx.lineTo(d.x+d.radius*0.6,d.y+d.radius*0.6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(d.x+d.radius*0.6,d.y-d.radius*0.6); ctx.lineTo(d.x-d.radius*0.6,d.y+d.radius*0.6); ctx.stroke();
+          } else if (d.type==="impurity"){
+            ctx.shadowColor="#f59e0b"; ctx.fillStyle="rgba(245,158,11,0.6)";
+            ctx.beginPath(); ctx.arc(d.x,d.y,d.radius*0.7,0,Math.PI*2); ctx.fill();
+          } else {
+            ctx.shadowColor="#8b5cf6"; ctx.strokeStyle="rgba(139,92,246,0.6)"; ctx.lineWidth=2;
+            ctx.beginPath();
+            for (let k=0;k<6;k++){ const a=(k/6)*Math.PI*2-Math.PI/6;
+              k===0?ctx.moveTo(d.x+d.radius*Math.cos(a),d.y+d.radius*Math.sin(a)):ctx.lineTo(d.x+d.radius*Math.cos(a),d.y+d.radius*Math.sin(a)); }
+            ctx.closePath(); ctx.stroke();
+          }
+          ctx.restore();
+        });
+        // Phonons
+        phononsRef.current.forEach(p=>{
+          p.x+=p.vx; p.y+=p.vy;
+          if (p.y<0||p.y>H){p.vy*=-1; p.y=Math.max(0,Math.min(H,p.y));}
+          if (p.x>W){p.x=0; p.y=Math.random()*H; p.energy=0.3+Math.random()*0.7*(tempRef.current/300);}
+          if (p.x<0) p.x=W;
+          p.scatterTimer-=16;
+          if (p.scatterTimer<=0){
+            const a=Math.random()*Math.PI*2, sp2=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+            p.vx=sp2*Math.cos(a)*(0.7+Math.random()*0.6); p.vy=sp2*Math.sin(a)*(0.7+Math.random()*0.6);
+            p.energy*=0.85+Math.random()*0.1;
+            p.scatterTimer=400+Math.random()*1200*(300/Math.max(tempRef.current,1));
+            scatterRef.current++; if (scatterRef.current%5===0) setScatterCount(scatterRef.current);
+          }
+          defectsRef.current.forEach(d=>{
+            const dx=p.x-d.x, dy=p.y-d.y, dist=Math.sqrt(dx*dx+dy*dy);
+            if (dist<d.radius+p.radius){
+              const a=Math.atan2(dy,dx)+(Math.random()-0.5)*1.2, sp2=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+              p.vx=sp2*Math.cos(a); p.vy=sp2*Math.sin(a); p.energy*=0.75;
+              scatterRef.current++; if (scatterRef.current%5===0) setScatterCount(scatterRef.current);
+            }
+          });
+          p.trail.push({x:p.x,y:p.y}); if (p.trail.length>TRAIL_LEN) p.trail.shift();
+          if (p.trail.length>1) for (let i=1;i<p.trail.length;i++){
+            const alpha=(i/p.trail.length)*0.5;
+            ctx.strokeStyle=p.energy>0.6?`rgba(236,72,153,${alpha})`:`rgba(0,212,255,${alpha})`;
+            ctx.lineWidth=p.radius*0.5;
+            ctx.beginPath(); ctx.moveTo(p.trail[i-1].x,p.trail[i-1].y); ctx.lineTo(p.trail[i].x,p.trail[i].y); ctx.stroke();
+          }
+          const col=p.energy>0.6?`rgba(236,72,153,${0.5+p.energy*0.5})`:`rgba(0,212,255,${0.5+p.energy*0.5})`;
+          ctx.save(); ctx.shadowColor=col; ctx.shadowBlur=8+p.energy*8;
+          ctx.beginPath(); ctx.arc(p.x,p.y,p.radius,0,Math.PI*2); ctx.fillStyle=col; ctx.fill(); ctx.restore();
+        });
+        ctx.fillStyle="rgba(236,72,153,0.7)"; ctx.font="bold 11px 'IBM Plex Mono',monospace";
+        ctx.textAlign="left"; ctx.fillText("HOT",6,16);
+        ctx.fillStyle="rgba(0,212,255,0.7)"; ctx.textAlign="right"; ctx.fillText("COLD",W-6,16);
+      }
+      rafRef.current=requestAnimationFrame(draw);
+    };
+    rafRef.current=requestAnimationFrame(draw);
+    return ()=>cancelAnimationFrame(rafRef.current);
+  }, [temp, defectDensity, initSim]);
+
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-bold mb-1" style={{color:"#ec4899",fontFamily:"'DM Sans',sans-serif"}}>Phonon Scattering</h2>
+      <p className="text-sm mb-4" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>
+        Phonons (quantised lattice vibrations) carry heat through a crystal. Watch how they scatter off defects, grain boundaries, and each other.
+      </p>
+      <div className="flex flex-wrap gap-6 mb-4">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>TEMPERATURE: {temp} K</label>
+          <input type="range" min={50} max={1200} step={50} value={temp}
+            onChange={e=>{const v=Number(e.target.value);setTemp(v);tempRef.current=v;}}
+            style={{width:160,accentColor:"#ec4899"}} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>DEFECT DENSITY: {defectDensity}</label>
+          <input type="range" min={0} max={30} step={1} value={defectDensity}
+            onChange={e=>{const v=Number(e.target.value);setDefectDensity(v);defDenRef.current=v;}}
+            style={{width:160,accentColor:"#f59e0b"}} />
+        </div>
+        <div className="flex items-end gap-3">
+          <button onClick={()=>{pausedRef.current=!pausedRef.current;setPaused(p=>!p);}}
+            className="text-xs px-3 py-1.5 rounded font-bold"
+            style={{background:paused?"rgba(0,212,255,0.2)":"rgba(236,72,153,0.2)",
+              border:`1px solid ${paused?"rgba(0,212,255,0.5)":"rgba(236,72,153,0.5)"}`,
+              color:paused?"#00d4ff":"#ec4899",fontFamily:"'IBM Plex Mono',monospace"}}>
+            {paused?"▶ RESUME":"⏸ PAUSE"}
+          </button>
+          <div className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>
+            Scattering events: <span style={{color:"#eab308",fontWeight:700}}>{scatterCount}</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-4 mb-3 text-xs" style={{fontFamily:"'IBM Plex Mono',monospace"}}>
+        <span><span style={{color:"#ef4444"}}>✕</span> Vacancy</span>
+        <span><span style={{color:"#f59e0b"}}>●</span> Impurity</span>
+        <span><span style={{color:"#8b5cf6"}}>⬡</span> Grain boundary</span>
+        <span><span style={{color:"#ec4899"}}>●</span> High-energy phonon</span>
+        <span><span style={{color:"#00d4ff"}}>●</span> Low-energy phonon</span>
+      </div>
+      <canvas ref={canvasRef} className="w-full rounded-xl"
+        style={{height:380,background:"#080c1c",border:"1px solid rgba(255,255,255,0.08)"}} />
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+        {[
+          {title:"Umklapp Scattering",color:"#ec4899",text:"When two phonons interact and their combined momentum exceeds the Brillouin zone boundary, the excess momentum is transferred to the lattice. This is the dominant thermal resistance mechanism at high temperatures."},
+          {title:"Defect Scattering",color:"#f59e0b",text:"Vacancies, impurities, and grain boundaries break the perfect periodicity of the lattice, scattering phonons and reducing thermal conductivity. This is exploited in thermoelectric materials."},
+          {title:"Thermal Conductivity",color:"#00d4ff",text:"κ = (1/3)Cvℓ, where C is heat capacity, v is phonon group velocity, and ℓ is mean free path. Higher temperature → more Umklapp scattering → shorter ℓ → lower κ."},
+        ].map(({title,color,text})=>(
+          <div key={title} className="p-3 rounded-lg" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)"}}>
+            <h4 className="text-xs font-bold mb-1" style={{color,fontFamily:"'IBM Plex Mono',monospace"}}>{title}</h4>
+            <p className="text-xs leading-relaxed" style={{color:"#8a9bb0"}}>{text}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
