@@ -300,10 +300,7 @@ export default function PianoPractice() {
   const [gameState,   setGameState]   = useState<GameState>("idle");
   const [songIdx,     setSongIdx]     = useState(0);
   const [difficulty,  setDifficulty]  = useState<Difficulty>("normal");
-  const [score,       setScore]       = useState(0);
-  const [combo,       setCombo]       = useState(0);
-  const [maxCombo,    setMaxCombo]    = useState(0);
-  const [accuracy,    setAccuracy]    = useState(100);
+
   const [countdown,   setCountdown]   = useState(3);
   const [midiConn,    setMidiConn]    = useState(false);
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
@@ -352,11 +349,8 @@ export default function PianoPractice() {
   // Mutable refs
   const gsRef        = useRef<GameState>("idle");
   const fallingRef   = useRef<FallingNote[]>([]);
-  const scoreRef     = useRef(0);
-  const comboRef     = useRef(0);
-  const maxComboRef  = useRef(0);
-  const hitsRef      = useRef(0);
-  const totalRef     = useRef(0);
+
+
   const pressedRef   = useRef<Set<number>>(new Set());
   const startTimeRef   = useRef(0);
   const leadInRef       = useRef<number>(4); // beats of lead-in remaining (mutable)
@@ -664,13 +658,6 @@ export default function PianoPractice() {
     }
 
     if (gs==="finished"){
-      ctx.fillStyle="rgba(0,0,0,0.65)"; ctx.fillRect(0,0,W,H);
-      ctx.fillStyle="#ec4899";
-      ctx.font="bold 28px 'DM Sans',sans-serif"; ctx.textAlign="center";
-      ctx.fillText("FINISHED!",W/2,H/2-28);
-      ctx.fillStyle="white"; ctx.font="16px 'IBM Plex Mono',monospace";
-      ctx.fillText(`Score: ${scoreRef.current}`,W/2,H/2+8);
-      ctx.fillText(`Max Combo: ×${maxComboRef.current}`,W/2,H/2+30);
       rafHw.current=requestAnimationFrame(drawHighway); return;
     }
 
@@ -721,7 +708,7 @@ export default function PianoPractice() {
     // Mark missed
     for (const fn of fallingRef.current){
       if (!fn.hit&&!fn.missed&&fn.beatStart+fn.beatDuration<beat-0.5){
-        fn.missed=true; comboRef.current=0; setCombo(0);
+        fn.missed=true;
       }
     }
 
@@ -770,21 +757,10 @@ export default function PianoPractice() {
     ctx.font="bold 9px 'IBM Plex Mono',monospace"; ctx.textAlign="left";
     ctx.fillText("DFT  0–4 kHz",8,14);
 
-    // HUD
-    ctx.fillStyle="rgba(236,72,153,0.9)";
-    ctx.font="bold 13px 'IBM Plex Mono',monospace"; ctx.textAlign="left";
-    ctx.fillText(`${scoreRef.current}`,10,32);
-    if (comboRef.current>1){
-      ctx.fillStyle="#eab308"; ctx.font="bold 11px 'IBM Plex Mono',monospace";
-      ctx.fillText(`×${comboRef.current} COMBO`,10,48);
-    }
-
     // End check
     const lastBeat=Math.max(...songRef.current.notes.map(n=>n.beat+n.duration));
     if (beat>lastBeat+2){
       gsRef.current="finished"; setGameState("finished");
-      setScore(scoreRef.current); setMaxCombo(maxComboRef.current);
-      setAccuracy(totalRef.current>0?Math.round(hitsRef.current/totalRef.current*100):100);
     }
 
      // Redraw piano every frame so DFT energy glow animates continuously
@@ -802,12 +778,8 @@ export default function PianoPractice() {
       if (fn.midi!==midi||fn.hit||fn.missed) continue;
       const d=Math.abs(fn.beatStart-beat);
       if (d<=win){
-        fn.hit=true; fn.hitTime=performance.now(); hitsRef.current++;
-        const pts=d<win*0.25?100:d<win*0.6?80:60; // forgiving: min 60pts
-        comboRef.current++;
-        if (comboRef.current>maxComboRef.current) maxComboRef.current=comboRef.current;
-        scoreRef.current+=Math.round(pts*(1+comboRef.current*0.08)); // bigger combo bonus
-        setScore(scoreRef.current); setCombo(comboRef.current); break;
+        fn.hit=true; fn.hitTime=performance.now();
+        break;
       }
     }
   },[]);
@@ -821,11 +793,10 @@ export default function PianoPractice() {
     const duet=isDuetRef.current;
     const duetSong=allDuetSongs[duetIdxRef.current];
     const activeSong=duet?{name:duetSong.name,bpm:duetSong.bpm,notes:duetSong.user}:SONGS[songIdx];
-    fallingRef.current=[]; scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
-    hitsRef.current=0; totalRef.current=activeSong.notes.length;
+    fallingRef.current=[];
     noteIdRef.current=0; songRef.current=activeSong; diffRef.current=difficulty;
     leadInRef.current=leadInRef2.current;
-    setScore(0); setCombo(0); setMaxCombo(0); setAccuracy(100);
+
     gsRef.current="countdown"; setGameState("countdown");
     cdRef.current=3; setCountdown(3);
     let c=3;
@@ -1150,16 +1121,7 @@ export default function PianoPractice() {
               MIDI ●
             </span>
           )}
-          {combo>1&&(
-            <span className="text-xs font-bold px-2 py-0.5 rounded"
-              style={{background:"rgba(234,179,8,0.15)",border:"1px solid rgba(234,179,8,0.3)",color:"#eab308",fontFamily:"'IBM Plex Mono',monospace"}}>
-              ×{combo}
-            </span>
-          )}
-          <div className="text-right">
-            <div className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>SCORE</div>
-            <div className="text-lg font-bold" style={{color:"#ec4899",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1}}>{score.toLocaleString()}</div>
-          </div>
+
         </div>
       </div>
 
@@ -1188,7 +1150,7 @@ export default function PianoPractice() {
           </span>
           <div className="flex items-center gap-3">
             <span className="text-xs" style={{color:"rgba(138,155,176,0.5)",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>
-              ACC {accuracy}% · MAX ×{maxCombo} · BPM {Math.round(SONGS[songIdx].bpm*tempoScale/100)}
+              BPM {Math.round(SONGS[songIdx].bpm*tempoScale/100)}
               {!audioReady&&" · Click to unlock audio"}
             </span>
             {/* Zoom / octave range */}
@@ -1238,30 +1200,17 @@ export default function PianoPractice() {
         </div>
         <div className="flex-1 relative min-h-0">
           <canvas ref={hwRef} className="w-full h-full" style={{display:"block"}} />
-          {/* Results overlay */}
+          {/* Song finished overlay */}
           {gameState==="finished"&&(
             <div className="absolute inset-0 flex flex-col items-center justify-center"
-              style={{background:"rgba(10,15,30,0.88)",backdropFilter:"blur(4px)"}}>
+              style={{background:"rgba(10,15,30,0.75)",backdropFilter:"blur(4px)"}}>
               <div className="text-center px-8 py-6 rounded-xl"
-                style={{background:"rgba(15,20,40,0.95)",border:"1px solid rgba(236,72,153,0.4)",boxShadow:"0 0 40px rgba(236,72,153,0.2)"}}>
-                <div className="text-4xl font-black mb-1" style={{color:"#ec4899",fontFamily:"'DM Sans',sans-serif"}}>
-                  {accuracy>=90?"S":accuracy>=70?"A":accuracy>=45?"B":"C"}
-                </div>
-                <div className="text-xs mb-1" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>GRADE</div>
-                <div className="text-sm font-semibold mb-4" style={{color:"#00d4ff",fontFamily:"'DM Sans',sans-serif"}}>
-                  {accuracy>=90?"🎹 Brilliant! Keep it up!":accuracy>=70?"🎵 Great job! You're improving!":accuracy>=45?"👍 Nice try! Practice makes perfect!":"💪 Keep going — you'll get it!"}
-                </div>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs mb-5" style={{fontFamily:"'IBM Plex Mono',monospace"}}>
-                  <span style={{color:"#8a9bb0"}}>ACCURACY</span>
-                  <span className="font-bold" style={{color:"#00d4ff"}}>{accuracy}%</span>
-                  <span style={{color:"#8a9bb0"}}>SCORE</span>
-                  <span className="font-bold" style={{color:"#ec4899"}}>{score.toLocaleString()}</span>
-                  <span style={{color:"#8a9bb0"}}>MAX COMBO</span>
-                  <span className="font-bold" style={{color:"#eab308"}}>×{maxCombo}</span>
-                </div>
+                style={{background:"rgba(15,20,40,0.95)",border:"1px solid rgba(0,212,255,0.3)",boxShadow:"0 0 40px rgba(0,212,255,0.15)"}}>
+                <div className="text-2xl font-black mb-2" style={{color:"#00d4ff",fontFamily:"'DM Sans',sans-serif"}}>🎹 Song Complete!</div>
+                <div className="text-sm mb-5" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace"}}>Great practice session!</div>
                 <button onClick={startGame}
                   className="px-6 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-90"
-                  style={{background:"#ec4899",color:"white",fontFamily:"'IBM Plex Mono',monospace"}}>
+                  style={{background:"#00d4ff",color:"#0a0f1e",fontFamily:"'IBM Plex Mono',monospace"}}>
                   PLAY AGAIN
                 </button>
               </div>
