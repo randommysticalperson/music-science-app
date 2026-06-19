@@ -287,6 +287,12 @@ export default function PianoPractice() {
   const sustainRef  = useRef(false);
   const sustainedRef= useRef<Set<number>>(new Set());
   const [audioReady,setAudioReady] = useState(false);
+  // Microphone + dB
+  const micStreamRef  = useRef<MediaStream|null>(null);
+  const micAnalyserRef= useRef<AnalyserNode|null>(null);
+  const [micActive,   setMicActive]   = useState(false);
+  const [dbLevel,     setDbLevel]     = useState(-60);  // synth output dB
+  const [micDbLevel,  setMicDbLevel]  = useState(-60);  // mic input dB
 
   // Canvases — only two now: highway (with DFT background) + piano
   const hwRef    = useRef<HTMLCanvasElement>(null);
@@ -371,6 +377,64 @@ export default function PianoPractice() {
     ctxRef.current=ctx; analyserRef.current=analyser; masterRef.current=master;
     setAudioReady(true);
   },[]);
+
+  // ── Microphone with echo cancellation ─────────────────────────────────────
+  const toggleMic = useCallback(async ()=>{
+    if (micActive) {
+      micStreamRef.current?.getTracks().forEach(t=>t.stop());
+      micStreamRef.current = null;
+      micAnalyserRef.current = null;
+      setMicActive(false);
+      return;
+    }
+    if (!ctxRef.current) initAudio();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl:  true,
+        }
+      });
+      micStreamRef.current = stream;
+      const ctx = ctxRef.current!;
+      const src = ctx.createMediaStreamSource(stream);
+      const micAnalyser = ctx.createAnalyser();
+      micAnalyser.fftSize = 2048;
+      micAnalyser.smoothingTimeConstant = 0.8;
+      src.connect(micAnalyser); // NOT connected to destination — no feedback
+      micAnalyserRef.current = micAnalyser;
+      setMicActive(true);
+    } catch(e) {
+      console.warn('Mic access denied', e);
+    }
+  },[micActive, initAudio]);
+
+  // ── dB level polling (rAF-independent, 10fps) ─────────────────────────────
+  useEffect(()=>{
+    let id: ReturnType<typeof setTimeout>;
+    const poll = ()=>{
+      // Synth output dB
+      if (analyserRef.current) {
+        const buf = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(buf);
+        const rms = Math.sqrt(buf.reduce((s,v)=>s+v*v,0)/buf.length);
+        const db  = rms > 0 ? 20*Math.log10(rms/255) : -60;
+        setDbLevel(Math.max(-60, Math.min(0, db)));
+      }
+      // Mic input dB
+      if (micAnalyserRef.current) {
+        const buf = new Uint8Array(micAnalyserRef.current.frequencyBinCount);
+        micAnalyserRef.current.getByteFrequencyData(buf);
+        const rms = Math.sqrt(buf.reduce((s,v)=>s+v*v,0)/buf.length);
+        const db  = rms > 0 ? 20*Math.log10(rms/255) : -60;
+        setMicDbLevel(Math.max(-60, Math.min(0, db)));
+      }
+      id = setTimeout(poll, 100);
+    };
+    poll();
+    return ()=>clearTimeout(id);
+  },[micActive]);
 
   const playNote = useCallback((midi:number)=>{
     if (!ctxRef.current||!masterRef.current) return;
@@ -1113,15 +1177,61 @@ export default function PianoPractice() {
           </button>
         )}
 
-        {/* Right side */}
+                {/* Right side */}
         <div className="ml-auto flex items-center gap-3">
+          {/* Synth output dB meter */}
+          {audioReady&&(
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>OUT</span>
+              <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
+                <div className="absolute inset-y-0 left-0 rounded transition-all"
+                  style={{
+                    width:`${Math.max(0,((dbLevel+60)/60)*100)}%`,
+                    background: dbLevel > -6
+                      ? "linear-gradient(90deg,#22c55e,#ef4444)"
+                      : dbLevel > -18
+                      ? "linear-gradient(90deg,#22c55e,#eab308)"
+                      : "#22c55e",
+                  }}/>
+              </div>
+              <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{dbLevel.toFixed(0)} dB</span>
+            </div>
+          )}
+          {/* Mic toggle + mic dB meter */}
+          <button onClick={toggleMic}
+            className="px-2 py-0.5 rounded text-xs transition-all"
+            style={{
+              fontSize:9,
+              background:micActive?"rgba(34,197,94,0.2)":"rgba(255,255,255,0.04)",
+              border:`1px solid ${micActive?"rgba(34,197,94,0.5)":"rgba(255,255,255,0.08)"}`,
+              color:micActive?"#22c55e":"#8a9bb0",
+              fontFamily:"'IBM Plex Mono',monospace",
+            }}>
+            🎤 MIC{micActive?" ●":""}
+          </button>
+          {micActive&&(
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>IN</span>
+              <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
+                <div className="absolute inset-y-0 left-0 rounded transition-all"
+                  style={{
+                    width:`${Math.max(0,((micDbLevel+60)/60)*100)}%`,
+                    background: micDbLevel > -6
+                      ? "linear-gradient(90deg,#22c55e,#ef4444)"
+                      : micDbLevel > -18
+                      ? "linear-gradient(90deg,#22c55e,#eab308)"
+                      : "#22c55e",
+                  }}/>
+              </div>
+              <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{micDbLevel.toFixed(0)} dB</span>
+            </div>
+          )}
           {midiConn&&(
             <span className="text-xs px-2 py-0.5 rounded"
               style={{background:"rgba(34,197,94,0.15)",border:"1px solid rgba(34,197,94,0.3)",color:"#22c55e",fontFamily:"'IBM Plex Mono',monospace"}}>
               MIDI ●
             </span>
           )}
-
         </div>
       </div>
 

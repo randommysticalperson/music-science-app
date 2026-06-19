@@ -71,6 +71,12 @@ export default function ContinuousPiano() {
   const gainRef    = useRef<GainNode|null>(null);
   const analyserRef= useRef<AnalyserNode|null>(null);
   const [audioReady, setAudioReady] = useState(false);
+  // Microphone + dB
+  const micStreamRef   = useRef<MediaStream|null>(null);
+  const micAnalyserRef = useRef<AnalyserNode|null>(null);
+  const [micActive,  setMicActive]  = useState(false);
+  const [dbLevel,    setDbLevel]    = useState(-60);
+  const [micDbLevel, setMicDbLevel] = useState(-60);
 
   // Interaction state
   const playingRef = useRef(false);
@@ -133,6 +139,53 @@ export default function ContinuousPiano() {
 
     setAudioReady(true);
   },[]);
+
+  // ── Microphone with echo cancellation ─────────────────────────────────────
+  const toggleMic = useCallback(async ()=>{
+    if (micActive) {
+      micStreamRef.current?.getTracks().forEach(t=>t.stop());
+      micStreamRef.current = null;
+      micAnalyserRef.current = null;
+      setMicActive(false);
+      return;
+    }
+    if (!ctxRef.current) initAudio();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      micStreamRef.current = stream;
+      const ctx = ctxRef.current!;
+      const src = ctx.createMediaStreamSource(stream);
+      const ma = ctx.createAnalyser();
+      ma.fftSize = 2048; ma.smoothingTimeConstant = 0.8;
+      src.connect(ma); // NOT to destination — prevents feedback
+      micAnalyserRef.current = ma;
+      setMicActive(true);
+    } catch(e) { console.warn('Mic denied', e); }
+  },[micActive, initAudio]);
+
+  // ── dB polling at 10fps ────────────────────────────────────────────────────
+  useEffect(()=>{
+    let id: ReturnType<typeof setTimeout>;
+    const poll = ()=>{
+      if (analyserRef.current) {
+        const buf = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(buf);
+        const rms = Math.sqrt(buf.reduce((s,v)=>s+v*v,0)/buf.length);
+        setDbLevel(rms > 0 ? Math.max(-60,Math.min(0,20*Math.log10(rms/255))) : -60);
+      }
+      if (micAnalyserRef.current) {
+        const buf = new Uint8Array(micAnalyserRef.current.frequencyBinCount);
+        micAnalyserRef.current.getByteFrequencyData(buf);
+        const rms = Math.sqrt(buf.reduce((s,v)=>s+v*v,0)/buf.length);
+        setMicDbLevel(rms > 0 ? Math.max(-60,Math.min(0,20*Math.log10(rms/255))) : -60);
+      }
+      id = setTimeout(poll, 100);
+    };
+    poll();
+    return ()=>clearTimeout(id);
+  },[micActive]);
 
   // ── Pointer helpers ────────────────────────────────────────────────────────
   const getMidiFromX = useCallback((x: number): number|null => {
@@ -454,6 +507,54 @@ export default function ContinuousPiano() {
             }}>
             REVERB
           </button>
+          {/* Synth output dB meter */}
+          {audioReady&&(
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>OUT</span>
+              <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
+                <div className="absolute inset-y-0 left-0 rounded transition-all"
+                  style={{
+                    width:`${Math.max(0,((dbLevel+60)/60)*100)}%`,
+                    background: dbLevel > -6
+                      ? "linear-gradient(90deg,#22c55e,#ef4444)"
+                      : dbLevel > -18
+                      ? "linear-gradient(90deg,#22c55e,#eab308)"
+                      : "#22c55e",
+                  }}/>
+              </div>
+              <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{dbLevel.toFixed(0)} dB</span>
+            </div>
+          )}
+          {/* MIC toggle */}
+          <button onClick={toggleMic}
+            className="px-2 py-0.5 rounded text-xs transition-all"
+            style={{
+              fontSize:9,
+              background:micActive?"rgba(34,197,94,0.2)":"rgba(255,255,255,0.04)",
+              border:`1px solid ${micActive?"rgba(34,197,94,0.5)":"rgba(255,255,255,0.08)"}`,
+              color:micActive?"#22c55e":"#8a9bb0",
+              fontFamily:"'IBM Plex Mono',monospace",
+            }}>
+            🎤 MIC{micActive?" ●":""}
+          </button>
+          {/* Mic input dB meter */}
+          {micActive&&(
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>IN</span>
+              <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
+                <div className="absolute inset-y-0 left-0 rounded transition-all"
+                  style={{
+                    width:`${Math.max(0,((micDbLevel+60)/60)*100)}%`,
+                    background: micDbLevel > -6
+                      ? "linear-gradient(90deg,#22c55e,#ef4444)"
+                      : micDbLevel > -18
+                      ? "linear-gradient(90deg,#22c55e,#eab308)"
+                      : "#22c55e",
+                  }}/>
+              </div>
+              <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{micDbLevel.toFixed(0)} dB</span>
+            </div>
+          )}
           {!audioReady&&(
             <span className="text-xs" style={{color:"rgba(236,72,153,0.6)",fontSize:9}}>
               Click piano to unlock audio
