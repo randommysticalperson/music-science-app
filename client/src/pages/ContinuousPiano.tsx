@@ -507,25 +507,23 @@ export default function ContinuousPiano() {
             }}>
             REVERB
           </button>
-          {/* Synth output dB meter */}
-          {audioReady&&(
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>OUT</span>
-              <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
-                <div className="absolute inset-y-0 left-0 rounded transition-all"
-                  style={{
-                    width:`${Math.max(0,((dbLevel+60)/60)*100)}%`,
-                    background: dbLevel > -6
-                      ? "linear-gradient(90deg,#22c55e,#ef4444)"
-                      : dbLevel > -18
-                      ? "linear-gradient(90deg,#22c55e,#eab308)"
-                      : "#22c55e",
-                  }}/>
-              </div>
-              <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{dbLevel.toFixed(0)} dB</span>
+          {/* OUT dB meter — always visible */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>OUT</span>
+            <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
+              <div className="absolute inset-y-0 left-0 rounded transition-all"
+                style={{
+                  width:`${Math.max(0,((dbLevel+60)/60)*100)}%`,
+                  background: dbLevel > -6
+                    ? "linear-gradient(90deg,#22c55e,#ef4444)"
+                    : dbLevel > -18
+                    ? "linear-gradient(90deg,#22c55e,#eab308)"
+                    : "#22c55e",
+                }}/>
             </div>
-          )}
-          {/* MIC toggle */}
+            <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{dbLevel.toFixed(0)} dB</span>
+          </div>
+          {/* MIC toggle button */}
           <button onClick={toggleMic}
             className="px-2 py-0.5 rounded text-xs transition-all"
             style={{
@@ -537,24 +535,22 @@ export default function ContinuousPiano() {
             }}>
             🎤 MIC{micActive?" ●":""}
           </button>
-          {/* Mic input dB meter */}
-          {micActive&&(
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>IN</span>
-              <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
-                <div className="absolute inset-y-0 left-0 rounded transition-all"
-                  style={{
-                    width:`${Math.max(0,((micDbLevel+60)/60)*100)}%`,
-                    background: micDbLevel > -6
-                      ? "linear-gradient(90deg,#22c55e,#ef4444)"
-                      : micDbLevel > -18
-                      ? "linear-gradient(90deg,#22c55e,#eab308)"
-                      : "#22c55e",
-                  }}/>
-              </div>
-              <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{micDbLevel.toFixed(0)} dB</span>
+          {/* IN dB meter — always visible */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{color:"#8a9bb0",fontFamily:"'IBM Plex Mono',monospace",fontSize:9}}>IN</span>
+            <div className="relative rounded overflow-hidden" style={{width:64,height:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)"}}>
+              <div className="absolute inset-y-0 left-0 rounded transition-all"
+                style={{
+                  width:`${Math.max(0,((micDbLevel+60)/60)*100)}%`,
+                  background: micDbLevel > -6
+                    ? "linear-gradient(90deg,#22c55e,#ef4444)"
+                    : micDbLevel > -18
+                    ? "linear-gradient(90deg,#22c55e,#eab308)"
+                    : "#22c55e",
+                }}/>
             </div>
-          )}
+            <span className="text-xs font-mono" style={{color:"#8a9bb0",fontSize:9,minWidth:28}}>{micDbLevel.toFixed(0)} dB</span>
+          </div>
           {!audioReady&&(
             <span className="text-xs" style={{color:"rgba(236,72,153,0.6)",fontSize:9}}>
               Click piano to unlock audio
